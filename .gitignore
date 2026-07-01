@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# secrets (keys stay local — use config.example.ts as a template)
+src/config.ts
+
+# build output
+*.apk
+*.aab

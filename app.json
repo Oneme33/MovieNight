@@ -1,25 +1,38 @@
 {
   "expo": {
-    "name": "filmavond",
+    "name": "MovieNight",
     "slug": "filmavond",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#17110F",
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.coenvermeer.filmavond",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#B7121C",
+        "foregroundImage": "./assets/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#17110F",
+          "image": "./assets/adaptive-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      "expo-font",
+      "expo-localization"
+    ]
   }
 }
