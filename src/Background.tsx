@@ -16,6 +16,6 @@ export function Background({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg },
-  // dark scrim — subtle enough to see the photo, dark enough for readability
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(16,11,10,0.55)' },
+  // Strong dark overlay + blur: the photo becomes soft ambiance, UI comes first.
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,7,6,0.82)' },
 });

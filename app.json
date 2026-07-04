@@ -32,7 +32,13 @@
         }
       ],
       "expo-font",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow camera access to scan a pairing QR code."
+        }
+      ]
     ]
   }
 }

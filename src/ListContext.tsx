@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from './supabase';
+import { joinList } from './db';
 
 type Session = {
   listId: string;
@@ -40,10 +42,28 @@ export function ListProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) setSessionState(JSON.parse(raw));
+        // Ensure an (anonymous) auth session so locked-down access works.
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        if (!authSession) await supabase.auth.signInAnonymously();
+
         const lang = await AsyncStorage.getItem(LANG_KEY);
         if (lang === 'en' || lang === 'nl' || lang === 'original') setTitleLangState(lang);
+
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const s: Session = JSON.parse(raw);
+          try {
+            // (Re)establish membership — migrates v1.0 users and reinstalls.
+            await joinList(s.code, s.memberName);
+            setSessionState(s);
+          } catch (e: any) {
+            if (String(e?.message ?? e).includes('code_not_found')) {
+              await AsyncStorage.removeItem(STORAGE_KEY);
+            } else {
+              setSessionState(s); // keep session on transient/offline errors
+            }
+          }
+        }
       } catch {}
       setLoading(false);
     })();

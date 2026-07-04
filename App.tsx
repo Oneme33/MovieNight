@@ -5,7 +5,7 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts, BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
 import { theme } from './src/theme';
 import { t, appName } from './src/i18n';
@@ -46,6 +46,7 @@ function HeaderTitle() {
 }
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <NavigationContainer theme={navTheme}>
       <Tab.Navigator
@@ -54,7 +55,14 @@ function MainTabs() {
           headerTitleStyle: { color: theme.text, fontFamily: 'BebasNeue_400Regular', fontSize: 26, letterSpacing: 3 },
           headerTitleAlign: 'center',
           headerTintColor: theme.text,
-          tabBarStyle: { backgroundColor: theme.surfaceOpaque, borderTopColor: theme.border },
+          tabBarStyle: {
+            backgroundColor: theme.surfaceOpaque,
+            borderTopColor: theme.border,
+            height: 60 + insets.bottom,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 8,
+          },
+          tabBarLabelStyle: { fontSize: 12, marginBottom: 2 },
           tabBarActiveTintColor: theme.red,
           tabBarInactiveTintColor: theme.textFaint,
           tabBarIcon: ({ color, size }) => (

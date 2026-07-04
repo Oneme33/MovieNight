@@ -1,38 +1,32 @@
 import { supabase, ListRow, MovieRow } from './supabase';
 
-// Generate a short, easy-to-read pairing code (no confusing characters).
-const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-function makeCode(len = 6): string {
-  let out = '';
-  for (let i = 0; i < len; i++) {
-    out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
-  }
-  return out;
-}
-
-export async function createList(name: string): Promise<ListRow> {
-  // Retry a few times in the unlikely case of a duplicate code.
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = makeCode();
-    const { data, error } = await supabase
-      .from('lists')
-      .insert({ code, name })
-      .select()
-      .single();
-    if (!error && data) return data as ListRow;
-    if (error && !error.message.includes('duplicate')) throw error;
-  }
-  throw new Error('Kon geen unieke code aanmaken, probeer opnieuw.');
-}
-
-export async function findListByCode(code: string): Promise<ListRow | null> {
-  const { data, error } = await supabase
-    .from('lists')
-    .select()
-    .eq('code', code.trim().toUpperCase())
-    .maybeSingle();
+// Create a new list (server generates the code and adds you as the first member).
+export async function createList(name: string, memberName: string): Promise<ListRow> {
+  const { data, error } = await supabase.rpc('create_list', {
+    p_name: name,
+    p_member_name: memberName,
+  });
   if (error) throw error;
-  return (data as ListRow) ?? null;
+  return data as ListRow;
+}
+
+// Join a list by code (also used to (re)establish membership on launch). Throws
+// 'code_not_found' when the code doesn't exist.
+export async function joinList(code: string, memberName: string): Promise<ListRow> {
+  const { data, error } = await supabase.rpc('join_list', {
+    p_code: code.trim().toUpperCase(),
+    p_member_name: memberName,
+  });
+  if (error) throw error;
+  return data as ListRow;
+}
+
+// Leave a list on this device (frees your membership).
+export async function leaveList(listId: string): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  const uid = auth.user?.id;
+  if (!uid) return;
+  await supabase.from('list_members').delete().eq('list_id', listId).eq('user_id', uid);
 }
 
 export async function fetchMovies(listId: string): Promise<MovieRow[]> {

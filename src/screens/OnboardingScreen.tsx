@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform, Alert,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Alert, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { theme, radius } from '../theme';
 import { t, appName } from '../i18n';
 import { useSession } from '../ListContext';
-import { createList, findListByCode } from '../db';
+import { createList, joinList } from '../db';
 
 type Mode = 'choose' | 'create' | 'join';
 
@@ -17,12 +18,33 @@ export default function OnboardingScreen() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const scannedRef = useRef(false);
+
+  const openScanner = async () => {
+    if (!name.trim()) return Alert.alert(t.errName);
+    const res = permission?.granted ? permission : await requestPermission();
+    if (!res?.granted) return Alert.alert(t.cameraDenied);
+    scannedRef.current = false;
+    setScanning(true);
+  };
+
+  const onScan = ({ data }: { data: string }) => {
+    if (scannedRef.current) return;
+    scannedRef.current = true;
+    setScanning(false);
+    const raw = String(data ?? '').trim();
+    const c = (raw.startsWith('MNIGHT:') ? raw.slice(7) : raw).toUpperCase();
+    setCode(c);
+    doJoin(c);
+  };
 
   const doCreate = async () => {
     if (!name.trim()) return Alert.alert(t.errName);
     setBusy(true);
     try {
-      const list = await createList('Our watchlist');
+      const list = await createList('Our watchlist', name.trim());
       await setSession({ listId: list.id, code: list.code, memberName: name.trim() });
     } catch (e: any) {
       Alert.alert(t.somethingWrong, e.message ?? String(e));
@@ -31,19 +53,20 @@ export default function OnboardingScreen() {
     }
   };
 
-  const doJoin = async () => {
+  const doJoin = async (overrideCode?: string) => {
+    const theCode = (overrideCode ?? code).trim();
     if (!name.trim()) return Alert.alert(t.errName);
-    if (!code.trim()) return Alert.alert(t.errCode);
+    if (!theCode) return Alert.alert(t.errCode);
     setBusy(true);
     try {
-      const list = await findListByCode(code);
-      if (!list) {
-        Alert.alert(t.codeNotFound, t.codeNotFoundBody);
-        return;
-      }
+      const list = await joinList(theCode, name.trim());
       await setSession({ listId: list.id, code: list.code, memberName: name.trim() });
     } catch (e: any) {
-      Alert.alert(t.somethingWrong, e.message ?? String(e));
+      if (String(e?.message ?? e).includes('code_not_found')) {
+        Alert.alert(t.codeNotFound, t.codeNotFoundBody);
+      } else {
+        Alert.alert(t.somethingWrong, e.message ?? String(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -100,9 +123,16 @@ export default function OnboardingScreen() {
             </>
           )}
 
+          {mode === 'join' && (
+            <TouchableOpacity style={styles.scanBtn} onPress={openScanner}>
+              <Ionicons name="qr-code-outline" size={18} color={theme.text} />
+              <Text style={styles.scanBtnText}>{t.scanQr}</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={mode === 'create' ? doCreate : doJoin}
+            onPress={mode === 'create' ? () => doCreate() : () => doJoin()}
             disabled={busy}
           >
             {busy ? (
@@ -119,6 +149,23 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
+        <View style={styles.scanContainer}>
+          <CameraView
+            style={{ flex: 1 }}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={onScan}
+          />
+          <View style={styles.scanOverlay} pointerEvents="box-none">
+            <Text style={styles.scanText}>{t.scanHint}</Text>
+            <TouchableOpacity style={styles.scanClose} onPress={() => setScanning(false)}>
+              <Text style={styles.scanCloseText}>{t.cancel}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -152,4 +199,14 @@ const styles = StyleSheet.create({
   secondaryText: { color: theme.text, fontSize: 16, fontWeight: '600' },
   backBtn: { alignItems: 'center', paddingVertical: 10 },
   backText: { color: theme.textMuted, fontSize: 14 },
+  scanBtn: {
+    flexDirection: 'row', gap: 8, backgroundColor: theme.surface2, borderRadius: radius.md,
+    height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border,
+  },
+  scanBtnText: { color: theme.text, fontSize: 15, fontWeight: '600' },
+  scanContainer: { flex: 1, backgroundColor: '#000' },
+  scanOverlay: { position: 'absolute', left: 0, right: 0, bottom: 60, alignItems: 'center', gap: 16 },
+  scanText: { color: '#fff', fontSize: 15, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  scanClose: { backgroundColor: theme.red, paddingHorizontal: 24, paddingVertical: 12, borderRadius: radius.md },
+  scanCloseText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

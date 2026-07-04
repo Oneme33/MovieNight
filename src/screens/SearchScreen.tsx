@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet,
-  Image, ActivityIndicator, Keyboard, ScrollView, Modal, Pressable,
+  Image, ActivityIndicator, Keyboard, ScrollView, Modal, Pressable, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { theme, radius } from '../theme';
@@ -9,10 +9,11 @@ import { Background } from '../Background';
 import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import {
-  searchMovies, discoverByProvider, getMovieExtras, IMG, LOGO,
-  OUR_PROVIDERS, SearchResult, DiscoverSort,
+  searchMovies, discover, getMovieExtras, IMG, LOGO,
+  OUR_PROVIDERS, GENRE_OPTIONS, SearchResult, DiscoverSort, Length,
 } from '../tmdb';
 import { addMovie, fetchMovies } from '../db';
+import { MovieDetails, DetailTarget } from '../MovieDetails';
 
 const SORTS: { key: DiscoverSort; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'popular', label: t.sortPopular, icon: 'flame' },
@@ -21,19 +22,33 @@ const SORTS: { key: DiscoverSort; label: string; icon: keyof typeof Ionicons.gly
   { key: 'year_asc', label: t.jaarUp, icon: 'arrow-up' },
 ];
 
+const LENGTHS: { key: Length; label: string }[] = [
+  { key: 'all', label: t.lenAll },
+  { key: 'short', label: t.lenShort },
+  { key: 'mid', label: t.lenMid },
+  { key: 'long', label: t.lenLong },
+];
+
+const provKey = (id: number | null) => (id ? OUR_PROVIDERS.find((p) => p.id === id)?.key : undefined);
+
 export default function SearchScreen() {
   const { session, titleLang } = useSession();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [onlyOurs, setOnlyOurs] = useState(false);
-  const [added, setAdded] = useState<Set<number>>(new Set());
-  const [service, setService] = useState<(typeof OUR_PROVIDERS)[number] | null>(null);
-  const [sort, setSort] = useState<DiscoverSort>('popular');
-  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [added, setAdded] = useState<Set<number>>(new Set());
+  const [service, setService] = useState<number | null>(null);
+  const [streamingOnly, setStreamingOnly] = useState(false);
+  const [detailFor, setDetailFor] = useState<DetailTarget>(null);
+  const [sort, setSort] = useState<DiscoverSort>('popular');
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [genre, setGenre] = useState<number | null>(null);
+  const [length, setLength] = useState<Length>('all');
+  const [kids, setKids] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -43,43 +58,56 @@ export default function SearchScreen() {
     }).catch(() => {});
   }, [session]);
 
+  const fetchExtrasFor = (list: SearchResult[]) => {
+    list.forEach(async (r) => {
+      const ex = await getMovieExtras(r.tmdb_id, titleLang);
+      setResults((prev) => prev.map((x) =>
+        x.tmdb_id === r.tmdb_id
+          ? { ...x, ours: ex.ours, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true }
+          : x));
+    });
+  };
+
   const runSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); return; }
+    if (!q.trim()) return;
     setLoading(true);
     try {
       const res = await searchMovies(q, titleLang);
       setResults(res);
       setLoading(false);
-      res.forEach(async (r) => {
-        const ex = await getMovieExtras(r.tmdb_id, titleLang);
-        setResults((prev) => prev.map((x) =>
-          x.tmdb_id === r.tmdb_id ? { ...x, ours: ex.ours, rating: x.rating ?? ex.rating, providersLoaded: true } : x));
-      });
+      fetchExtrasFor(res);
     } catch { setLoading(false); }
   }, [titleLang]);
 
-  // Browse by service (discover) — page 1 when service/sort/language changes.
+  // Browse (discover) whenever there is no query — reacts to service/sort/filters/language.
   useEffect(() => {
-    if (!service || query.trim()) return;
+    if (query.trim()) return;
     let cancelled = false;
     setLoading(true);
     setPage(1);
-    discoverByProvider(service.id, sort, titleLang, 1)
-      .then((d) => { if (!cancelled) { setResults(d.results); setTotalPages(d.totalPages); } })
+    discover({ providerId: service, streaming: streamingOnly, sort, lang: titleLang, page: 1, genre, length, kids })
+      .then((d) => {
+        if (cancelled) return;
+        setResults(d.results);
+        setTotalPages(d.totalPages);
+        fetchExtrasFor(d.results);
+      })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [service, sort, titleLang, query]);
+  }, [service, streamingOnly, sort, titleLang, genre, length, kids, query]);
 
   const loadMore = async () => {
-    if (!service || loadingMore || page >= totalPages) return;
+    if (query.trim() || loadingMore || page >= totalPages) return;
     setLoadingMore(true);
     try {
       const next = page + 1;
-      const d = await discoverByProvider(service.id, sort, titleLang, next);
+      const d = await discover({ providerId: service, streaming: streamingOnly, sort, lang: titleLang, page: next, genre, length, kids });
       setResults((prev) => {
-        const seen = new Set(prev.map((r) => r.tmdb_id));
-        return [...prev, ...d.results.filter((r) => !seen.has(r.tmdb_id))];
+        const seenIds = new Set(prev.map((r) => r.tmdb_id));
+        const fresh = d.results.filter((r) => !seenIds.has(r.tmdb_id));
+        fetchExtrasFor(fresh);
+        return [...prev, ...fresh];
       });
       setPage(next);
       setTotalPages(d.totalPages);
@@ -88,14 +116,8 @@ export default function SearchScreen() {
 
   const onChange = (txt: string) => {
     setQuery(txt);
-    if (txt.trim()) setService(null);
     if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => runSearch(txt), 450);
-  };
-
-  const selectService = (p: (typeof OUR_PROVIDERS)[number]) => {
-    if (service?.key === p.key) { setService(null); setResults([]); return; }
-    setQuery(''); setResults([]); setService(p);
+    if (txt.trim()) debounce.current = setTimeout(() => runSearch(txt), 450);
   };
 
   const onAdd = async (r: SearchResult) => {
@@ -109,9 +131,12 @@ export default function SearchScreen() {
     } catch { setAdded((prev) => { const n = new Set(prev); n.delete(r.tmdb_id); return n; }); }
   };
 
+  // In search mode: the selected chip acts as a filter + client-side sorting.
   let visible = results;
   if (query.trim()) {
-    if (onlyOurs) visible = visible.filter((r) => !r.providersLoaded || r.ours.length > 0);
+    const key = provKey(service);
+    if (key) visible = visible.filter((r) => !r.providersLoaded || r.ours.some((o) => o.key === key));
+    else if (streamingOnly) visible = visible.filter((r) => !r.providersLoaded || r.ours.length > 0);
     if (sort !== 'popular') {
       visible = [...visible].sort((a, b) =>
         sort === 'rating' ? (b.rating ?? -1) - (a.rating ?? -1)
@@ -120,11 +145,13 @@ export default function SearchScreen() {
     }
   }
 
+  const filterCount = (genre ? 1 : 0) + (length !== 'all' ? 1 : 0) + (kids ? 1 : 0);
+
   const renderItem = ({ item }: { item: SearchResult }) => {
     const poster = IMG(item.poster_path, 'w200');
     const isAdded = added.has(item.tmdb_id);
     return (
-      <View style={styles.card}>
+      <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={() => setDetailFor(item)}>
         <View style={styles.poster}>
           {poster ? <Image source={{ uri: poster }} style={styles.posterImg} />
             : <Ionicons name="film-outline" size={22} color={theme.textFaint} />}
@@ -138,6 +165,7 @@ export default function SearchScreen() {
               <View style={styles.rating}><Ionicons name="star" size={12} color={theme.gold} /><Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text></View>
             ) : null}
             {item.genre ? <Text style={styles.genre}>{item.genre}</Text> : null}
+            {item.runtime ? <Text style={styles.genre}>· {item.runtime} min</Text> : null}
           </View>
           <View style={styles.badges}>
             {!item.providersLoaded ? <Text style={styles.faint}>{t.providersLoading}</Text>
@@ -150,11 +178,11 @@ export default function SearchScreen() {
         <TouchableOpacity style={[styles.addBtn, isAdded && styles.addBtnDone]} onPress={() => onAdd(item)} disabled={isAdded}>
           <Ionicons name={isAdded ? 'checkmark' : 'add'} size={22} color="#fff" />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   };
 
-  const footer = (service && !query.trim() && page < totalPages && !loading) ? (
+  const footer = (!query.trim() && page < totalPages && !loading) ? (
     <TouchableOpacity style={styles.moreBtn} onPress={loadMore} disabled={loadingMore}>
       {loadingMore ? <ActivityIndicator color={theme.text} /> : <Text style={styles.moreText}>{t.loadMore}</Text>}
     </TouchableOpacity>
@@ -170,16 +198,29 @@ export default function SearchScreen() {
           value={query} onChangeText={onChange} returnKeyType="search"
           onSubmitEditing={() => { Keyboard.dismiss(); runSearch(query); }} autoCorrect={false}
         />
-        {query ? <TouchableOpacity onPress={() => { setQuery(''); setResults([]); }}><Ionicons name="close-circle" size={18} color={theme.textFaint} /></TouchableOpacity> : null}
+        {query ? <TouchableOpacity onPress={() => setQuery('')}><Ionicons name="close-circle" size={18} color={theme.textFaint} /></TouchableOpacity> : null}
       </View>
 
       <View style={styles.chipWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          <TouchableOpacity
+            style={[styles.svcChip, service === null && !streamingOnly && styles.svcChipOn]}
+            onPress={() => { setService(null); setStreamingOnly(false); }}
+          >
+            <Text style={[styles.svcText, service === null && !streamingOnly && styles.svcTextOn]}>{t.all}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.svcChip, service === null && streamingOnly && styles.svcChipOn]}
+            onPress={() => { setService(null); setStreamingOnly(true); }}
+          >
+            <Ionicons name="tv-outline" size={15} color={service === null && streamingOnly ? theme.text : theme.textMuted} />
+            <Text style={[styles.svcText, service === null && streamingOnly && styles.svcTextOn]}>{t.streaming}</Text>
+          </TouchableOpacity>
           {OUR_PROVIDERS.map((p) => {
-            const on = service?.key === p.key;
+            const on = service === p.id;
             const l = LOGO(p.logo);
             return (
-              <TouchableOpacity key={p.key} style={[styles.svcChip, on && styles.svcChipOn]} onPress={() => selectService(p)}>
+              <TouchableOpacity key={p.key} style={[styles.svcChip, on && styles.svcChipOn]} onPress={() => setService(on ? null : p.id)}>
                 {l ? <Image source={{ uri: l }} style={styles.svcLogo} /> : null}
                 <Text style={[styles.svcText, on && styles.svcTextOn]}>{p.key}</Text>
               </TouchableOpacity>
@@ -188,16 +229,16 @@ export default function SearchScreen() {
         </ScrollView>
       </View>
 
-      <View style={styles.sortRow}>
-        <TouchableOpacity style={styles.sortBtn} onPress={() => setSortMenuOpen(true)} activeOpacity={0.8}>
-          <Ionicons name="swap-vertical" size={16} color={theme.text} />
-          <Text style={styles.sortBtnText}>{t.sortPrefix}{SORTS.find((s) => s.key === sort)!.label}</Text>
-          <Ionicons name="chevron-down" size={16} color={theme.textMuted} style={{ marginLeft: 'auto' }} />
+      <View style={styles.controls}>
+        <TouchableOpacity style={styles.ctrlBtn} onPress={() => setSortMenuOpen(true)} activeOpacity={0.8}>
+          <Ionicons name="swap-vertical" size={15} color={theme.text} />
+          <Text style={styles.ctrlText} numberOfLines={1}>{SORTS.find((s) => s.key === sort)!.label}</Text>
+          <Ionicons name="chevron-down" size={14} color={theme.textMuted} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
-        {query ? (
-          <TouchableOpacity style={styles.filterMini} onPress={() => setOnlyOurs((v) => !v)}>
-            <Ionicons name={onlyOurs ? 'checkbox' : 'square-outline'} size={16} color={onlyOurs ? theme.red : theme.textMuted} />
-            <Text style={styles.filterMiniText}>{t.onlyOurs}</Text>
+        {!query.trim() ? (
+          <TouchableOpacity style={[styles.ctrlBtn, filterCount > 0 && styles.ctrlBtnOn]} onPress={() => setFilterOpen(true)} activeOpacity={0.8}>
+            <Ionicons name="options-outline" size={15} color={filterCount > 0 ? '#fff' : theme.text} />
+            <Text style={[styles.ctrlText, filterCount > 0 && { color: '#fff' }]}>{t.filters}{filterCount ? ` (${filterCount})` : ''}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -213,29 +254,70 @@ export default function SearchScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24 }}
           ListFooterComponent={footer}
-          ListEmptyComponent={
-            (query || service) ? <Text style={styles.faintCenter}>{t.noResults}</Text> : (
-              <View style={styles.hint}><Text style={styles.hintText}>{t.searchHint}</Text></View>
-            )
-          }
+          ListEmptyComponent={<Text style={styles.faintCenter}>{t.noResults}</Text>}
         />
       )}
-
-      <Modal visible={sortMenuOpen} transparent animationType="fade" onRequestClose={() => setSortMenuOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setSortMenuOpen(false)}>
-          <View style={styles.menu}>
-            <Text style={styles.menuTitle}>{t.sortBy}</Text>
-            {SORTS.map((s) => (
-              <TouchableOpacity key={s.key} style={styles.menuItem} onPress={() => { setSort(s.key); setSortMenuOpen(false); }}>
-                <Ionicons name={s.icon} size={18} color={sort === s.key ? theme.red : theme.textMuted} />
-                <Text style={[styles.menuItemText, sort === s.key && { color: theme.red, fontWeight: '600' }]}>{s.label}</Text>
-                {sort === s.key ? <Ionicons name="checkmark" size={18} color={theme.red} style={{ marginLeft: 'auto' }} /> : null}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
      </View>
+
+     <Modal visible={sortMenuOpen} transparent animationType="fade" onRequestClose={() => setSortMenuOpen(false)}>
+       <Pressable style={styles.backdrop} onPress={() => setSortMenuOpen(false)}>
+         <View style={styles.menu}>
+           <Text style={styles.menuTitle}>{t.sortBy}</Text>
+           {SORTS.map((s) => (
+             <TouchableOpacity key={s.key} style={styles.menuItem} onPress={() => { setSort(s.key); setSortMenuOpen(false); }}>
+               <Ionicons name={s.icon} size={18} color={sort === s.key ? theme.red : theme.textMuted} />
+               <Text style={[styles.menuItemText, sort === s.key && { color: theme.red, fontWeight: '600' }]}>{s.label}</Text>
+               {sort === s.key ? <Ionicons name="checkmark" size={18} color={theme.red} style={{ marginLeft: 'auto' }} /> : null}
+             </TouchableOpacity>
+           ))}
+         </View>
+       </Pressable>
+     </Modal>
+
+     <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
+       <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
+         <Pressable style={styles.filterSheet}>
+           <View style={styles.filterHeaderRow}>
+             <Text style={styles.filterHeader}>{t.filters}</Text>
+             <TouchableOpacity onPress={() => { setGenre(null); setLength('all'); setKids(false); }}>
+               <Text style={styles.clearText}>{t.clear}</Text>
+             </TouchableOpacity>
+           </View>
+
+           <Text style={styles.filterLabel}>{t.lengthLabel}</Text>
+           <View style={styles.wrapRow}>
+             {LENGTHS.map((l) => (
+               <TouchableOpacity key={l.key} style={[styles.fChip, length === l.key && styles.fChipOn]} onPress={() => setLength(l.key)}>
+                 <Text style={[styles.fChipText, length === l.key && styles.fChipTextOn]}>{l.label}</Text>
+               </TouchableOpacity>
+             ))}
+           </View>
+
+           <View style={styles.kidsRow}>
+             <Text style={styles.filterLabel}>{t.kids}</Text>
+             <Switch value={kids} onValueChange={setKids} trackColor={{ true: theme.red, false: theme.surface2 }} thumbColor="#fff" />
+           </View>
+
+           <Text style={styles.filterLabel}>{t.genreLabel}</Text>
+           <View style={styles.wrapRow}>
+             {GENRE_OPTIONS.map((g) => {
+               const on = genre === g.id;
+               return (
+                 <TouchableOpacity key={g.id} style={[styles.fChip, on && styles.fChipOn]} onPress={() => setGenre(on ? null : g.id)}>
+                   <Text style={[styles.fChipText, on && styles.fChipTextOn]}>{g.name}</Text>
+                 </TouchableOpacity>
+               );
+             })}
+           </View>
+
+           <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterOpen(false)}>
+             <Text style={styles.applyText}>{t.apply}</Text>
+           </TouchableOpacity>
+         </Pressable>
+       </Pressable>
+     </Modal>
+
+     <MovieDetails target={detailFor} lang={titleLang} onClose={() => setDetailFor(null)} />
     </Background>
   );
 }
@@ -251,26 +333,20 @@ const styles = StyleSheet.create({
   chipWrap: { height: 50, justifyContent: 'center' },
   chipRow: { gap: 8, paddingRight: 8, alignItems: 'center' },
   svcChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, height: 38,
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 38,
     borderRadius: 20, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border,
   },
   svcChipOn: { borderColor: theme.red, backgroundColor: theme.redSoft },
   svcLogo: { width: 22, height: 22, borderRadius: 5, backgroundColor: '#fff' },
   svcText: { color: theme.textMuted, fontSize: 13 },
   svcTextOn: { color: theme.text, fontWeight: '600' },
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
-  sortBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.surface2,
-    borderRadius: radius.md, paddingHorizontal: 14, height: 42, borderWidth: 1, borderColor: theme.border,
+  controls: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  ctrlBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.surface2,
+    borderRadius: radius.md, paddingHorizontal: 12, height: 40, borderWidth: 1, borderColor: theme.border,
   },
-  sortBtnText: { color: theme.text, fontSize: 14, fontWeight: '500' },
-  filterMini: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 32 },
-  menu: { backgroundColor: theme.surfaceOpaque, borderRadius: 16, padding: 8, borderWidth: 1, borderColor: theme.border },
-  menuTitle: { color: theme.textMuted, fontSize: 12, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 14, borderRadius: 10 },
-  menuItemText: { color: theme.text, fontSize: 15 },
-  filterMiniText: { color: theme.textMuted, fontSize: 12 },
+  ctrlBtnOn: { backgroundColor: theme.red, borderColor: theme.red },
+  ctrlText: { color: theme.text, fontSize: 13, fontWeight: '500' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.surface,
@@ -292,6 +368,22 @@ const styles = StyleSheet.create({
   addBtnDone: { backgroundColor: theme.green },
   moreBtn: { marginTop: 4, marginBottom: 20, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: radius.md, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border },
   moreText: { color: theme.text, fontSize: 14, fontWeight: '500' },
-  hint: { paddingHorizontal: 8, marginTop: 40 },
-  hintText: { color: theme.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 28 },
+  menu: { backgroundColor: theme.surfaceOpaque, borderRadius: 16, padding: 8, borderWidth: 1, borderColor: theme.border },
+  menuTitle: { color: theme.textMuted, fontSize: 12, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 14, borderRadius: 10 },
+  menuItemText: { color: theme.text, fontSize: 15 },
+  filterSheet: { backgroundColor: theme.surfaceOpaque, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: theme.border },
+  filterHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  filterHeader: { color: theme.text, fontSize: 17, fontWeight: '600' },
+  clearText: { color: theme.red, fontSize: 14 },
+  filterLabel: { color: theme.textMuted, fontSize: 13, marginBottom: 8, marginTop: 10 },
+  wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  fChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border },
+  fChipOn: { backgroundColor: theme.red, borderColor: theme.red },
+  fChipText: { color: theme.textMuted, fontSize: 13 },
+  fChipTextOn: { color: '#fff', fontWeight: '600' },
+  kidsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  applyBtn: { marginTop: 18, backgroundColor: theme.red, borderRadius: radius.md, height: 48, alignItems: 'center', justifyContent: 'center' },
+  applyText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });
