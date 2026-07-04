@@ -71,9 +71,14 @@ export type SearchResult = {
   genre: string | null;
   rating: number | null;
   runtime?: number | null;
+  popularity?: number;
   ours: Provider[];
   providersLoaded: boolean;
 };
+
+// Unreleased movies are hidden everywhere — you can't watch them yet.
+const today = () => new Date().toISOString().slice(0, 10);
+const isReleased = (r: any) => !r.release_date || r.release_date <= today();
 
 // In-memory cache: identical searches within a session don't hit the API again.
 const searchCache = new Map<string, SearchResult[]>();
@@ -86,7 +91,7 @@ export async function searchMovies(query: string, lang: TitleLang = 'en'): Promi
   const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`TMDB search failed (${res.status})`);
   const data = await res.json();
-  const results = (data.results ?? []).map((r: any): SearchResult => ({
+  const results = (data.results ?? []).filter(isReleased).map((r: any): SearchResult => ({
     tmdb_id: r.id,
     title: pickTitle(lang, r.title, r.original_title),
     year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
@@ -112,7 +117,8 @@ export type DiscoverPage = { results: SearchResult[]; totalPages: number };
 export type Length = 'all' | 'short' | 'mid' | 'long';
 export type DiscoverOpts = {
   providerId?: number | null;
-  streaming?: boolean; // true = any NL subscription service; false = everything
+  streaming?: boolean; // true = on one of the selected services; false = everything
+  streamingIds?: number[]; // the selected services (used when streaming=true)
   sort: DiscoverSort;
   lang?: TitleLang;
   page?: number;
@@ -132,17 +138,18 @@ function runtimeParams(len?: Length): string {
 
 // Browse movies: everything, any NL subscription service, or one service — with filters.
 export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
-  const { providerId = null, streaming = false, sort, lang = 'en', page = 1, genre = null, length = 'all', kids = false } = o;
-  const cacheKey = `${providerId}:${streaming}:${sort}:${lang}:${page}:${genre}:${length}:${kids}`;
+  const { providerId = null, streaming = false, streamingIds = [], sort, lang = 'en', page = 1, genre = null, length = 'all', kids = false } = o;
+  const cacheKey = `${providerId}:${streaming}:${streamingIds.join('.')}:${sort}:${lang}:${page}:${genre}:${length}:${kids}`;
   const hit = discoverCache.get(cacheKey);
   if (hit) return { results: hit.results.map((r: SearchResult) => ({ ...r })), totalPages: hit.totalPages };
   const prov = providerId ? OUR_PROVIDERS.find((p) => p.id === providerId) : undefined;
   const ours: Provider[] = prov ? [{ key: prov.key, name: prov.key, logo_path: prov.logo }] : [];
   let url = `${BASE}/discover/movie?language=${apiLang(lang)}&watch_region=NL`
-    + `&include_adult=false`
+    + `&include_adult=false&primary_release_date.lte=${today()}`
     + `&sort_by=${SORT_PARAM[sort]}&page=${page}`;
   if (providerId || streaming) url += '&with_watch_monetization_types=flatrate';
   if (providerId) url += `&with_watch_providers=${providerId}`;
+  else if (streaming && streamingIds.length) url += `&with_watch_providers=${streamingIds.join('|')}`;
   if (genre) url += `&with_genres=${genre}`;
   url += runtimeParams(length);
   if (kids) url += '&certification_country=NL&certification.lte=9';
@@ -163,6 +170,36 @@ export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
   const out = { results, totalPages: Math.min(data.total_pages ?? 1, 500) };
   discoverCache.set(cacheKey, out);
   return { results: out.results.map((r: SearchResult) => ({ ...r })), totalPages: out.totalPages };
+}
+
+// Recommendations based on one movie (TMDB "recommendations"), cached per session.
+const recsCache = new Map<string, SearchResult[]>();
+
+export async function recommendationsFor(tmdbId: number, lang: TitleLang = 'en'): Promise<SearchResult[]> {
+  const key = `${tmdbId}:${lang}`;
+  const hit = recsCache.get(key);
+  if (hit) return hit;
+  try {
+    const url = `${BASE}/movie/${tmdbId}/recommendations?language=${apiLang(lang)}&page=1`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results = (data.results ?? []).filter(isReleased).map((r: any): SearchResult => ({
+      tmdb_id: r.id,
+      title: pickTitle(lang, r.title, r.original_title),
+      year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
+      poster_path: r.poster_path ?? null,
+      genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
+      rating: typeof r.vote_average === 'number' && r.vote_average > 0 ? r.vote_average : null,
+      popularity: typeof r.popularity === 'number' ? r.popularity : 0,
+      ours: [],
+      providersLoaded: false,
+    }));
+    recsCache.set(key, results);
+    return results;
+  } catch {
+    return [];
+  }
 }
 
 export type MovieExtras = {

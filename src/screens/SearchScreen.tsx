@@ -32,7 +32,8 @@ const LENGTHS: { key: Length; label: string }[] = [
 const provKey = (id: number | null) => (id ? OUR_PROVIDERS.find((p) => p.id === id)?.key : undefined);
 
 export default function SearchScreen() {
-  const { session, titleLang } = useSession();
+  const { session, titleLang, services } = useSession();
+  const myProviders = OUR_PROVIDERS.filter((p) => services.includes(p.key));
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,6 +58,11 @@ export default function SearchScreen() {
       setAdded(new Set(ms.map((m) => m.tmdb_id).filter(Boolean) as number[]));
     }).catch(() => {});
   }, [session]);
+
+  // If the selected service was removed in Settings, fall back to "All".
+  useEffect(() => {
+    if (service && !myProviders.some((p) => p.id === service)) setService(null);
+  }, [services]);
 
   const fetchExtrasFor = (list: SearchResult[]) => {
     list.forEach(async (r) => {
@@ -85,7 +91,7 @@ export default function SearchScreen() {
     let cancelled = false;
     setLoading(true);
     setPage(1);
-    discover({ providerId: service, streaming: streamingOnly, sort, lang: titleLang, page: 1, genre, length, kids })
+    discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: 1, genre, length, kids })
       .then((d) => {
         if (cancelled) return;
         setResults(d.results);
@@ -95,14 +101,14 @@ export default function SearchScreen() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [service, streamingOnly, sort, titleLang, genre, length, kids, query]);
+  }, [service, streamingOnly, sort, titleLang, genre, length, kids, query, services.join(',')]);
 
   const loadMore = async () => {
     if (query.trim() || loadingMore || page >= totalPages) return;
     setLoadingMore(true);
     try {
       const next = page + 1;
-      const d = await discover({ providerId: service, streaming: streamingOnly, sort, lang: titleLang, page: next, genre, length, kids });
+      const d = await discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: next, genre, length, kids });
       setResults((prev) => {
         const seenIds = new Set(prev.map((r) => r.tmdb_id));
         const fresh = d.results.filter((r) => !seenIds.has(r.tmdb_id));
@@ -133,10 +139,21 @@ export default function SearchScreen() {
 
   // In search mode: the selected chip acts as a filter + client-side sorting.
   let visible = results;
+  // Safety net: TMDB's server-side runtime filter is unreliable, so once the real
+  // runtime is loaded we drop movies that don't match the length filter.
+  if (!query.trim() && length !== 'all') {
+    visible = visible.filter((r) => {
+      const rt = r.runtime;
+      if (rt == null) return true; // still loading
+      if (length === 'short') return rt < 60;
+      if (length === 'mid') return rt >= 60 && rt <= 90;
+      return rt >= 90;
+    });
+  }
   if (query.trim()) {
     const key = provKey(service);
     if (key) visible = visible.filter((r) => !r.providersLoaded || r.ours.some((o) => o.key === key));
-    else if (streamingOnly) visible = visible.filter((r) => !r.providersLoaded || r.ours.length > 0);
+    else if (streamingOnly) visible = visible.filter((r) => !r.providersLoaded || r.ours.some((o) => services.includes(o.key)));
     if (sort !== 'popular') {
       visible = [...visible].sort((a, b) =>
         sort === 'rating' ? (b.rating ?? -1) - (a.rating ?? -1)
@@ -216,7 +233,7 @@ export default function SearchScreen() {
             <Ionicons name="tv-outline" size={15} color={service === null && streamingOnly ? theme.text : theme.textMuted} />
             <Text style={[styles.svcText, service === null && streamingOnly && styles.svcTextOn]}>{t.streaming}</Text>
           </TouchableOpacity>
-          {OUR_PROVIDERS.map((p) => {
+          {myProviders.map((p) => {
             const on = service === p.id;
             const l = LOGO(p.logo);
             return (

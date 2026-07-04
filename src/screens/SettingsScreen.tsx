@@ -5,9 +5,11 @@ import * as Clipboard from 'expo-clipboard';
 import { theme, radius } from '../theme';
 import { Background } from '../Background';
 import QRCode from 'react-native-qrcode-svg';
+import { Image } from 'react-native';
 import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { leaveList } from '../db';
+import { OUR_PROVIDERS, LOGO } from '../tmdb';
 
 const LANGS: { key: 'en' | 'nl' | 'original'; label: string }[] = [
   { key: 'en', label: t.langEn },
@@ -16,7 +18,12 @@ const LANGS: { key: 'en' | 'nl' | 'original'; label: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const { session, titleLang, updateName, setTitleLang, clearSession } = useSession();
+  const { session, titleLang, services, updateName, setTitleLang, setServices, clearSession } = useSession();
+
+  const toggleService = (key: string) => {
+    const next = services.includes(key) ? services.filter((k) => k !== key) : [...services, key];
+    if (next.length) setServices(next); // keep at least one selected
+  };
   const [name, setName] = useState(session?.memberName ?? '');
   const [saved, setSaved] = useState(false);
 
@@ -99,6 +106,22 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
+      <Text style={[styles.section, { marginTop: 28 }]}>{t.servicesSection}</Text>
+      <Text style={styles.hint}>{t.servicesHint}</Text>
+      <View style={styles.svcWrap}>
+        {OUR_PROVIDERS.map((p) => {
+          const on = services.includes(p.key);
+          const l = LOGO(p.logo);
+          return (
+            <TouchableOpacity key={p.key} style={[styles.svcChip, on && styles.svcChipOn]} onPress={() => toggleService(p.key)}>
+              {l ? <Image source={{ uri: l }} style={[styles.svcLogo, !on && { opacity: 0.45 }]} /> : null}
+              <Text style={[styles.svcText, on && styles.svcTextOn]}>{p.key}</Text>
+              {on ? <Ionicons name="checkmark" size={14} color={theme.red} /> : null}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <Text style={[styles.section, { marginTop: 28 }]}>{t.langSection}</Text>
       <Text style={styles.hint}>{t.langHint}</Text>
       <View style={styles.langRow}>
@@ -138,6 +161,15 @@ const styles = StyleSheet.create({
   code: { color: theme.red, fontSize: 21, fontWeight: '700', letterSpacing: 3 },
   codeActions: { flexDirection: 'row', gap: 8 },
   smallBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: theme.surface2, alignItems: 'center', justifyContent: 'center' },
+  svcWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  svcChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, height: 38,
+    borderRadius: 20, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border,
+  },
+  svcChipOn: { borderColor: theme.red, backgroundColor: theme.redSoft },
+  svcLogo: { width: 22, height: 22, borderRadius: 5, backgroundColor: '#fff' },
+  svcText: { color: theme.textMuted, fontSize: 13 },
+  svcTextOn: { color: theme.text, fontWeight: '600' },
   langRow: { flexDirection: 'row', gap: 8 },
   langChip: {
     flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: radius.md,

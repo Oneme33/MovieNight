@@ -142,7 +142,8 @@ const MovieCard = React.memo(function MovieCard(p: CardProps) {
               <View style={styles.rating}><Ionicons name="star" size={12} color={theme.gold} /><Text style={styles.ratingText}>{ex.rating.toFixed(1)}</Text></View>
             ) : null}
             {item.year ? <Text style={styles.meta}>{item.year}</Text> : null}
-            <Text style={styles.meta}>· {item.added_by ?? '?'}</Text>
+            {ex?.genres?.[0] ? <Text style={styles.meta}>· {ex.genres[0]}</Text> : null}
+            {ex?.runtime ? <Text style={styles.meta}>· {ex.runtime} min</Text> : null}
           </View>
           {item.seen && ratingPairs.length ? (
             <View style={styles.ourRatings}>
@@ -153,9 +154,15 @@ const MovieCard = React.memo(function MovieCard(p: CardProps) {
                 </View>
               ))}
             </View>
-          ) : ex?.ours?.length ? (
+          ) : (ex?.ours?.length || item.added_by) ? (
             <View style={styles.logos}>
-              {ex.ours.map((pr) => { const l = LOGO(pr.logo_path); return l ? <Image key={pr.key} source={{ uri: l }} style={styles.logo} /> : null; })}
+              {ex?.ours?.map((pr) => { const l = LOGO(pr.logo_path); return l ? <Image key={pr.key} source={{ uri: l }} style={styles.logo} /> : null; })}
+              {item.added_by ? (
+                <View style={styles.byChip}>
+                  <Ionicons name="person-outline" size={9} color={theme.textFaint} />
+                  <Text style={styles.byChipText}>{item.added_by}</Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -225,16 +232,18 @@ export default function WatchlistScreen() {
   const unseen = useMemo(() => {
     let arr = movies.filter((m) => !m.seen);
 
-    // Filters (based on loaded movie details; unknown data stays visible except for kids).
+    // Filters combine as AND; movies whose data is unknown are excluded while a filter is active.
     if (fLength !== 'all' || fGenre || fKids) {
       arr = arr.filter((m) => {
         const ex = m.tmdb_id ? extras[m.tmdb_id] : undefined;
-        if (fLength !== 'all' && ex?.runtime != null) {
-          if (fLength === 'short' && ex.runtime >= 60) return false;
-          if (fLength === 'mid' && (ex.runtime < 60 || ex.runtime > 90)) return false;
-          if (fLength === 'long' && ex.runtime < 90) return false;
+        if (fLength !== 'all') {
+          const rt = ex?.runtime;
+          if (rt == null) return false;
+          if (fLength === 'short' && rt >= 60) return false;
+          if (fLength === 'mid' && (rt < 60 || rt > 90)) return false;
+          if (fLength === 'long' && rt < 90) return false;
         }
-        if (fGenre && ex?.genreIds?.length && !ex.genreIds.includes(fGenre)) return false;
+        if (fGenre && !ex?.genreIds?.includes(fGenre)) return false;
         if (fKids && !(ex?.certAge != null && ex.certAge <= 9)) return false;
         return true;
       });
@@ -625,11 +634,17 @@ const styles = StyleSheet.create({
   poster: { width: 42, height: 60, borderRadius: 6, backgroundColor: theme.surface2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   posterImg: { width: 42, height: 60 },
   title: { color: theme.text, fontSize: 15, fontWeight: '600' },
-  subRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  subRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 3 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   ratingText: { color: theme.gold, fontSize: 12, fontWeight: '600' },
   meta: { color: theme.textMuted, fontSize: 12 },
-  logos: { flexDirection: 'row', gap: 5, marginTop: 6 },
+  logos: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  byChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 4,
+    backgroundColor: theme.surface2, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3,
+    borderWidth: 1, borderColor: theme.border,
+  },
+  byChipText: { color: theme.textFaint, fontSize: 10 },
   logo: { width: 22, height: 22, borderRadius: 5, backgroundColor: '#fff' },
   ourRatings: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
   ourRating: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: theme.surface2, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },

@@ -12,6 +12,7 @@ import { t, appName } from './src/i18n';
 import { ListProvider, useSession } from './src/ListContext';
 import WatchlistScreen from './src/screens/WatchlistScreen';
 import SearchScreen from './src/screens/SearchScreen';
+import ForYouScreen from './src/screens/ForYouScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 
@@ -34,6 +35,7 @@ const navTheme = {
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Watchlist: 'list',
   Search: 'search',
+  ForYou: 'sparkles-outline',
   Settings: 'settings-outline',
 };
 
@@ -72,6 +74,7 @@ function MainTabs() {
       >
         <Tab.Screen name="Watchlist" component={WatchlistScreen} options={{ headerTitle: () => <HeaderTitle />, tabBarLabel: t.tabList }} />
         <Tab.Screen name="Search" component={SearchScreen} options={{ title: t.tabSearch }} />
+        <Tab.Screen name="ForYou" component={ForYouScreen} options={{ title: t.tabForYou }} />
         <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: t.tabSettings }} />
       </Tab.Navigator>
     </NavigationContainer>
