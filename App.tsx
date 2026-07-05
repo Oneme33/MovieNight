@@ -60,11 +60,11 @@ function MainTabs() {
           tabBarStyle: {
             backgroundColor: theme.surfaceOpaque,
             borderTopColor: theme.border,
-            height: 60 + insets.bottom,
-            paddingTop: 8,
-            paddingBottom: insets.bottom + 8,
+            height: 64 + insets.bottom,
+            paddingTop: 6,
+            paddingBottom: insets.bottom + 12,
           },
-          tabBarLabelStyle: { fontSize: 12, marginBottom: 2 },
+          tabBarLabelStyle: { fontSize: 12, marginBottom: 4 },
           tabBarActiveTintColor: theme.red,
           tabBarInactiveTintColor: theme.textFaint,
           tabBarIcon: ({ color, size }) => (

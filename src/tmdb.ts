@@ -1,4 +1,5 @@
 import { TMDB_TOKEN } from './config';
+import { uiLang } from './i18n';
 import type { TitleLang } from './ListContext';
 
 const BASE = 'https://api.themoviedb.org/3';
@@ -17,33 +18,40 @@ const headers = {
   accept: 'application/json',
 };
 
-const GENRES: Record<number, string> = {
+// Genre names in both UI languages; always shown in the UI language (never mixed).
+const GENRES_NL: Record<number, string> = {
   28: 'Actie', 12: 'Avontuur', 16: 'Animatie', 35: 'Komedie', 80: 'Misdaad',
   99: 'Documentaire', 18: 'Drama', 10751: 'Familie', 14: 'Fantasy', 36: 'Historie',
   27: 'Horror', 10402: 'Muziek', 9648: 'Mysterie', 10749: 'Romantiek', 878: 'Sci-fi',
   10770: 'TV-film', 53: 'Thriller', 10752: 'Oorlog', 37: 'Western',
 };
+const GENRES_EN: Record<number, string> = {
+  28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy', 80: 'Crime',
+  99: 'Documentary', 18: 'Drama', 10751: 'Family', 14: 'Fantasy', 36: 'History',
+  27: 'Horror', 10402: 'Music', 9648: 'Mystery', 10749: 'Romance', 878: 'Sci-fi',
+  10770: 'TV movie', 53: 'Thriller', 10752: 'War', 37: 'Western',
+};
+const GENRES = uiLang === 'nl' ? GENRES_NL : GENRES_EN;
+export const genreName = (id: number): string | null => GENRES[id] ?? null;
 
 // Your streaming services (with TMDB id + logo for NL). Videoland is NL-only.
+// `watch` opens the service's search for a title (the app takes over when installed).
+const enc = encodeURIComponent;
 export const OUR_PROVIDERS = [
-  { key: 'Netflix', id: 8, logo: '/pbpMk2JmcoNnQwx5JGpXngfoWtp.jpg', match: ['netflix'] },
-  { key: 'Disney+', id: 337, logo: '/97yvRBw1GzX7fXprcF80er19ot.jpg', match: ['disney'] },
-  { key: 'Prime Video', id: 119, logo: '/pvske1MyAoymrs5bguRfVqYiM9a.jpg', match: ['prime video', 'amazon prime'] },
-  { key: 'Max', id: 1899, logo: '/jbe4gVSfRlbPTdESXhEKpornsfu.jpg', match: ['hbo max', 'max'] },
-  { key: 'Videoland', id: 72, logo: '/qN7uDYanT47WI0MmbwOr5HFFot.jpg', match: ['videoland'] },
-  { key: 'Viaplay', id: 76, logo: '/bnoTnLzz2MAhK3Yc6P9KXe5drIz.jpg', match: ['viaplay'] },
-  { key: 'SkyShowtime', id: 1773, logo: '/h0ZYcYHicKQ4Ixm5nOjqvwni5NG.jpg', match: ['skyshowtime'] },
-  { key: 'Apple TV+', id: 350, logo: '/mcbz1LgtErU9p4UdbZ0rG6RTWHX.jpg', match: ['apple tv'] },
+  { key: 'Netflix', id: 8, logo: '/pbpMk2JmcoNnQwx5JGpXngfoWtp.jpg', match: ['netflix'], watch: (q: string) => `https://www.netflix.com/search?q=${enc(q)}` },
+  { key: 'Disney+', id: 337, logo: '/97yvRBw1GzX7fXprcF80er19ot.jpg', match: ['disney'], watch: (q: string) => `https://www.disneyplus.com/search?q=${enc(q)}` },
+  { key: 'Prime Video', id: 119, logo: '/pvske1MyAoymrs5bguRfVqYiM9a.jpg', match: ['prime video', 'amazon prime'], watch: (q: string) => `https://www.primevideo.com/search?phrase=${enc(q)}` },
+  { key: 'Max', id: 1899, logo: '/jbe4gVSfRlbPTdESXhEKpornsfu.jpg', match: ['hbo max', 'max'], watch: (q: string) => `https://play.max.com/search?q=${enc(q)}` },
+  { key: 'Videoland', id: 72, logo: '/qN7uDYanT47WI0MmbwOr5HFFot.jpg', match: ['videoland'], watch: (q: string) => `https://www.videoland.com/search?query=${enc(q)}` },
+  { key: 'Viaplay', id: 76, logo: '/bnoTnLzz2MAhK3Yc6P9KXe5drIz.jpg', match: ['viaplay'], watch: (q: string) => `https://viaplay.nl/search?query=${enc(q)}` },
+  { key: 'SkyShowtime', id: 1773, logo: '/h0ZYcYHicKQ4Ixm5nOjqvwni5NG.jpg', match: ['skyshowtime'], watch: (q: string) => `https://www.skyshowtime.com/search?q=${enc(q)}` },
+  { key: 'Apple TV+', id: 350, logo: '/mcbz1LgtErU9p4UdbZ0rG6RTWHX.jpg', match: ['apple tv'], watch: (q: string) => `https://tv.apple.com/search?term=${enc(q)}` },
 ];
 
-// Genre options (id → Dutch label) for the search filter.
-export const GENRE_OPTIONS: { id: number; name: string }[] = [
-  { id: 28, name: 'Actie' }, { id: 12, name: 'Avontuur' }, { id: 16, name: 'Animatie' },
-  { id: 35, name: 'Komedie' }, { id: 80, name: 'Misdaad' }, { id: 99, name: 'Documentaire' },
-  { id: 18, name: 'Drama' }, { id: 10751, name: 'Familie' }, { id: 14, name: 'Fantasy' },
-  { id: 27, name: 'Horror' }, { id: 9648, name: 'Mysterie' }, { id: 10749, name: 'Romantiek' },
-  { id: 878, name: 'Sci-fi' }, { id: 53, name: 'Thriller' }, { id: 10752, name: 'Oorlog' },
-];
+// Genre options for the filters, in the UI language.
+export const GENRE_OPTIONS: { id: number; name: string }[] =
+  [28, 12, 16, 35, 80, 99, 18, 10751, 14, 27, 9648, 10749, 878, 53, 10752]
+    .map((id) => ({ id, name: GENRES[id] }));
 
 export type Provider = { name: string; logo_path: string | null; key: string };
 
@@ -72,7 +80,9 @@ export type SearchResult = {
   rating: number | null;
   runtime?: number | null;
   popularity?: number;
+  certAge?: number | null;
   ours: Provider[];
+  hasFlatrate?: boolean;
   providersLoaded: boolean;
 };
 
@@ -105,12 +115,13 @@ export async function searchMovies(query: string, lang: TitleLang = 'en'): Promi
   return results.map((r: SearchResult) => ({ ...r }));
 }
 
-export type DiscoverSort = 'popular' | 'rating' | 'year_desc' | 'year_asc';
+export type DiscoverSort = 'popular' | 'rating' | 'year_desc' | 'year_asc' | 'length';
 const SORT_PARAM: Record<DiscoverSort, string> = {
   popular: 'popularity.desc',
   rating: 'vote_average.desc',
   year_desc: 'primary_release_date.desc',
   year_asc: 'primary_release_date.asc',
+  length: 'popularity.desc', // no server-side runtime sort; sorted client-side once runtimes load
 };
 
 export type DiscoverPage = { results: SearchResult[]; totalPages: number };
@@ -205,6 +216,7 @@ export async function recommendationsFor(tmdbId: number, lang: TitleLang = 'en')
 export type MovieExtras = {
   rating: number | null;
   ours: Provider[];
+  hasFlatrate: boolean; // streamable anywhere in NL (any subscription service)
   title: string | null;
   runtime: number | null;
   overview: string;
@@ -215,7 +227,7 @@ export type MovieExtras = {
 };
 
 const EMPTY_EXTRAS: MovieExtras = {
-  rating: null, ours: [], title: null, runtime: null, overview: '', genres: [],
+  rating: null, ours: [], hasFlatrate: false, title: null, runtime: null, overview: '', genres: [],
   genreIds: [], certAge: null, trailerKey: null,
 };
 
@@ -254,14 +266,16 @@ export async function getMovieExtras(tmdbId: number, lang: TitleLang = 'en'): Pr
     const trailer =
       vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') ??
       vids.find((v: any) => v.site === 'YouTube');
+    const ids: number[] = (data.genres ?? []).map((g: any) => g.id);
     const extras: MovieExtras = {
       rating: typeof data.vote_average === 'number' && data.vote_average > 0 ? data.vote_average : null,
       ours: filterOurProviders(flat),
+      hasFlatrate: flat.length > 0,
       title: pickTitle(lang, data.title, data.original_title),
       runtime: typeof data.runtime === 'number' && data.runtime > 0 ? data.runtime : null,
       overview: data.overview ?? '',
-      genres: (data.genres ?? []).map((g: any) => g.name),
-      genreIds: (data.genres ?? []).map((g: any) => g.id),
+      genres: ids.map((id) => genreName(id)).filter(Boolean) as string[],
+      genreIds: ids,
       certAge: parseCertAge(data),
       trailerKey: trailer?.key ?? null,
     };

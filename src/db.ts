@@ -45,6 +45,16 @@ export async function addMovie(
   addedBy: string,
   fields: Partial<MovieRow> & { title: string }
 ): Promise<void> {
+  // A movie can only be on the list once (seen or unseen).
+  if (fields.tmdb_id) {
+    const { data: dup } = await supabase
+      .from('movies')
+      .select('id')
+      .eq('list_id', listId)
+      .eq('tmdb_id', fields.tmdb_id)
+      .limit(1);
+    if (dup && dup.length) return;
+  }
   // Put the new movie at the bottom of the unseen list.
   const { data } = await supabase
     .from('movies')
@@ -81,9 +91,10 @@ export async function markSeen(
   const ratings = { ...(movie.ratings ?? {}) };
   if (score != null) ratings[memberName] = score;
   else delete ratings[memberName];
+  // Editing a rating later keeps the original watch date.
   await supabase
     .from('movies')
-    .update({ seen: true, seen_at: new Date().toISOString(), ratings })
+    .update({ seen: true, seen_at: movie.seen_at ?? new Date().toISOString(), ratings })
     .eq('id', movie.id);
 }
 

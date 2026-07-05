@@ -26,6 +26,7 @@ export default function SettingsScreen() {
   };
   const [name, setName] = useState(session?.memberName ?? '');
   const [saved, setSaved] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
 
   const onSave = async () => {
     if (!name.trim()) return Alert.alert(t.errName);
@@ -78,33 +79,39 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={[styles.section, { marginTop: 28 }]}>{t.pairCode}</Text>
-      <Text style={styles.hint}>{t.codeHint}</Text>
-      <View style={styles.pairCard}>
-        <View style={styles.codeRow}>
-          <Text style={styles.code}>{session?.code}</Text>
-          <View style={styles.codeActions}>
-            <TouchableOpacity style={styles.smallBtn} onPress={copyCode}>
-              <Ionicons name="copy-outline" size={18} color={theme.text} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.smallBtn} onPress={shareCode}>
-              <Ionicons name="share-social-outline" size={18} color={theme.text} />
-            </TouchableOpacity>
+      <TouchableOpacity style={styles.pairHeader} onPress={() => setPairOpen((v) => !v)} activeOpacity={0.7}>
+        <Ionicons name="people-outline" size={18} color={theme.text} />
+        <Text style={styles.section}>{t.pairCode}</Text>
+        <Ionicons name={pairOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.textMuted} style={{ marginLeft: 'auto' }} />
+      </TouchableOpacity>
+      {pairOpen ? (
+        <View style={styles.pairCard}>
+          <Text style={styles.hint}>{t.codeHint}</Text>
+          <View style={styles.codeRow}>
+            <Text style={styles.code}>{session?.code}</Text>
+            <View style={styles.codeActions}>
+              <TouchableOpacity style={styles.smallBtn} onPress={copyCode}>
+                <Ionicons name="copy-outline" size={18} color={theme.text} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.smallBtn} onPress={shareCode}>
+                <Ionicons name="share-social-outline" size={18} color={theme.text} />
+              </TouchableOpacity>
+            </View>
           </View>
+          <View style={styles.pairDivider} />
+          <Text style={styles.qrHint}>{t.qrShow}</Text>
+          {session?.code ? (
+            <View style={styles.qrBox}>
+              <QRCode value={`MNIGHT:${session.code}`} size={148} backgroundColor="#ffffff" color="#111111" />
+            </View>
+          ) : null}
+          <View style={styles.pairDivider} />
+          <TouchableOpacity style={styles.unlinkInline} onPress={onUnlink}>
+            <Ionicons name="exit-outline" size={18} color={theme.red} />
+            <Text style={styles.unlinkText}>{t.unlink}</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.pairDivider} />
-        <Text style={styles.qrHint}>{t.qrShow}</Text>
-        {session?.code ? (
-          <View style={styles.qrBox}>
-            <QRCode value={`MNIGHT:${session.code}`} size={148} backgroundColor="#ffffff" color="#111111" />
-          </View>
-        ) : null}
-        <View style={styles.pairDivider} />
-        <TouchableOpacity style={styles.unlinkInline} onPress={onUnlink}>
-          <Ionicons name="exit-outline" size={18} color={theme.red} />
-          <Text style={styles.unlinkText}>{t.unlink}</Text>
-        </TouchableOpacity>
-      </View>
+      ) : null}
 
       <Text style={[styles.section, { marginTop: 28 }]}>{t.servicesSection}</Text>
       <Text style={styles.hint}>{t.servicesHint}</Text>
@@ -136,6 +143,7 @@ export default function SettingsScreen() {
         ))}
       </View>
 
+      <Text style={styles.attribution}>{t.attribution}</Text>
      </ScrollView>
     </Background>
   );
@@ -152,10 +160,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, color: theme.text, fontSize: 16, borderWidth: 1, borderColor: theme.border,
   },
   saveBtn: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: theme.red, alignItems: 'center', justifyContent: 'center' },
+  pairHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 28,
+    paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: theme.border,
+  },
   pairCard: {
     backgroundColor: theme.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.border,
-    padding: 14, alignItems: 'center',
+    padding: 14, alignItems: 'center', marginTop: 12,
   },
+  attribution: { color: theme.textFaint, fontSize: 11, textAlign: 'center', marginTop: 36, lineHeight: 16 },
   codeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   pairDivider: { height: 1, backgroundColor: theme.border, alignSelf: 'stretch', marginVertical: 14 },
   code: { color: theme.red, fontSize: 21, fontWeight: '700', letterSpacing: 3 },

@@ -1,63 +1,53 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, Image,
-  ActivityIndicator, Modal, Pressable, RefreshControl,
+  View, Text, FlatList, ScrollView, TouchableOpacity, StyleSheet, Image,
+  ActivityIndicator, RefreshControl, Modal, Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { TouchableOpacity as GHTouchable } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { hTap, hMedium } from '../haptics';
 import { theme, radius } from '../theme';
 import { Background } from '../Background';
 import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { MovieRow } from '../supabase';
 import { fetchMovies, addMovie } from '../db';
-import { recommendationsFor, getMovieExtras, IMG, LOGO, SearchResult } from '../tmdb';
+import { recommendationsFor, getMovieExtras, IMG, SearchResult } from '../tmdb';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 
-type RecSort = 'best' | 'nieuw' | 'waardering';
-const SORTS: { key: RecSort; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'best', label: t.sortBest, icon: 'sparkles' },
-  { key: 'nieuw', label: t.jaarDown, icon: 'arrow-down' },
-  { key: 'waardering', label: t.sortRating, icon: 'star' },
-];
+type Rec = SearchResult & { score: number };
 
 const MAX_SEEDS = 12;
-const MAX_RESULTS = 30;
+const MAX_RESULTS = 50;
+const ROW_SIZE = 12;
 const DISMISSED_KEY = 'filmavond.dismissedRecs';
 
-// Swipe-away wrapper; the action fades with the swipe so nothing bleeds through the glass card.
-function DismissibleRow({ children, onDismiss }: { children: React.ReactNode; onDismiss: () => void }) {
-  const [rowH, setRowH] = useState(0);
-  const actions = (progress: SharedValue<number>) => {
-    const AnimatedBtn = () => {
-      const style = useAnimatedStyle(() => ({ opacity: Math.min(progress.value, 1) }));
-      return (
-        <Animated.View style={style}>
-          <GHTouchable
-            style={[styles.dismissBtn, { height: rowH || undefined }]}
-            onPress={onDismiss}
-          >
-            <Ionicons name="eye-off-outline" size={20} color="#fff" />
-            <Text style={styles.dismissText}>{t.notInterested}</Text>
-          </GHTouchable>
-        </Animated.View>
-      );
-    };
-    return <AnimatedBtn />;
-  };
+function PosterCard({ item, isAdded, onPress, onAction }: {
+  item: Rec; isAdded: boolean; onPress: () => void; onAction: () => void;
+}) {
+  const poster = IMG(item.poster_path, 'w342');
   return (
-    <ReanimatedSwipeable
-      renderRightActions={actions}
-      overshootRight={false}
-      rightThreshold={70}
-      friction={1.6}
-    >
-      <View onLayout={(e) => setRowH(e.nativeEvent.layout.height - 10)}>{children}</View>
-    </ReanimatedSwipeable>
+    <TouchableOpacity style={pc.wrap} onPress={onPress} onLongPress={onAction} delayLongPress={280} activeOpacity={0.85}>
+      <View style={pc.poster}>
+        {poster ? (
+          <Image source={{ uri: poster }} style={pc.posterImg} />
+        ) : (
+          <View style={pc.posterEmpty}><Ionicons name="film-outline" size={28} color={theme.textFaint} /></View>
+        )}
+        {item.rating != null ? (
+          <View style={pc.badge}>
+            <Ionicons name="star" size={10} color={theme.gold} />
+            <Text style={pc.badgeText}>{item.rating.toFixed(1)}</Text>
+          </View>
+        ) : null}
+        <TouchableOpacity style={[pc.action, isAdded && pc.actionDone]} onPress={onAction}>
+          <Ionicons name={isAdded ? 'checkmark' : 'ellipsis-horizontal'} size={16} color={isAdded ? theme.green : theme.red} />
+        </TouchableOpacity>
+      </View>
+      <Text style={pc.title} numberOfLines={2}>{item.title}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -73,20 +63,29 @@ export default function ForYouScreen() {
     } catch { dismissedRef.current = new Set(); }
     return dismissedRef.current;
   };
-  const [recs, setRecs] = useState<(SearchResult & { score: number })[]>([]);
+
+  const [recs, setRecs] = useState<Rec[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [seedSig, setSeedSig] = useState('');
-  const [sort, setSort] = useState<RecSort>('best');
-  const [sortMenuOpen, setSortMenuOpen] = useState(false);
-  const [streamOnly, setStreamOnly] = useState(false);
   const [added, setAdded] = useState<Set<number>>(new Set());
   const [detailFor, setDetailFor] = useState<DetailTarget>(null);
+  const [actionFor, setActionFor] = useState<Rec | null>(null);
 
   const build = useCallback(async (force = false) => {
     if (!session) return;
     let movies: MovieRow[] = [];
-    try { movies = await fetchMovies(session.listId); } catch { setLoading(false); return; }
+    try {
+      movies = await fetchMovies(session.listId);
+    } catch {
+      // Offline: fall back to the last computed recommendations.
+      try {
+        const raw = await AsyncStorage.getItem('filmavond.recs');
+        if (raw) setRecs((prev) => (prev.length ? prev : JSON.parse(raw)));
+      } catch {}
+      setLoading(false);
+      return;
+    }
     setAdded(new Set(movies.map((m) => m.tmdb_id).filter(Boolean) as number[]));
 
     // Seeds: movies you rated 7+ first, then the current watchlist.
@@ -106,7 +105,7 @@ export default function ForYouScreen() {
 
     const lists = await Promise.all(seeds.map((s) => recommendationsFor(s.tmdb_id!, titleLang)));
     // Score: how often a movie is recommended across seeds (+ position & popularity as tiebreaker).
-    const scored = new Map<number, SearchResult & { score: number }>();
+    const scored = new Map<number, Rec>();
     lists.forEach((list) => {
       list.forEach((r, i) => {
         if (exclude.has(r.tmdb_id)) return;
@@ -117,15 +116,28 @@ export default function ForYouScreen() {
       });
     });
     const top = [...scored.values()].sort((a, b) => b.score - a.score).slice(0, MAX_RESULTS);
+    if (!top.length) {
+      // TMDB unreachable: keep whatever we had (cache) instead of blanking the tab.
+      try {
+        const raw = await AsyncStorage.getItem('filmavond.recs');
+        if (raw) setRecs((prev) => (prev.length ? prev : JSON.parse(raw)));
+      } catch {}
+      setLoading(false);
+      return;
+    }
     setRecs(top);
+    AsyncStorage.setItem('filmavond.recs', JSON.stringify(top)).catch(() => {});
     setLoading(false);
 
-    // Load services/runtime per movie (cached).
+    // Load runtime/age/services per movie (cached) so the theme rows can fill up.
     top.forEach(async (r) => {
       const ex = await getMovieExtras(r.tmdb_id, titleLang);
       setRecs((prev) => prev.map((x) =>
         x.tmdb_id === r.tmdb_id
-          ? { ...x, ours: ex.ours, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true }
+          ? {
+              ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating,
+              runtime: ex.runtime, certAge: ex.certAge, providersLoaded: true,
+            }
           : x));
     });
   }, [session, titleLang, seedSig, recs.length]);
@@ -134,23 +146,24 @@ export default function ForYouScreen() {
 
   const onRefresh = async () => { setRefreshing(true); await build(true); setRefreshing(false); };
 
-  const visible = useMemo(() => {
-    let arr = recs;
-    if (streamOnly) arr = arr.filter((r) => !r.providersLoaded || r.ours.some((o) => services.includes(o.key)));
-    if (sort === 'nieuw') arr = [...arr].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
-    else if (sort === 'waardering') arr = [...arr].sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
-    return arr;
-  }, [recs, sort, streamOnly, services]);
+  // Theme rows, derived from the scored recommendations.
+  const rows = useMemo(() => {
+    const byScore = (a: Rec, b: Rec) => b.score - a.score;
+    const onMyService = (r: Rec) => r.ours.some((o) => services.includes(o.key));
+    const popMedian = [...recs].map((r) => r.popularity ?? 0).sort((a, b) => a - b)[Math.floor(recs.length / 2)] ?? 0;
+    return [
+      { key: 'tonight', title: t.themeTonight, icon: 'sparkles' as const, data: [...recs].sort(byScore).slice(0, ROW_SIZE) },
+      { key: 'services', title: t.themeOnServices, icon: 'tv-outline' as const, data: recs.filter(onMyService).sort(byScore).slice(0, ROW_SIZE) },
+      { key: 'short', title: t.themeShort, icon: 'hourglass-outline' as const, data: recs.filter((r) => r.runtime != null && r.runtime <= 90).sort(byScore).slice(0, ROW_SIZE) },
+      { key: 'top', title: t.themeTop, icon: 'star-outline' as const, data: recs.filter((r) => r.rating != null).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, ROW_SIZE) },
+      { key: 'kids', title: t.themeKids, icon: 'happy-outline' as const, data: recs.filter((r) => r.certAge != null && r.certAge <= 9).sort(byScore).slice(0, ROW_SIZE) },
+      { key: 'gems', title: t.themeGems, icon: 'diamond-outline' as const, data: recs.filter((r) => (r.rating ?? 0) >= 7 && (r.popularity ?? 0) <= popMedian).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, ROW_SIZE) },
+    ].filter((row) => row.data.length >= 3);
+  }, [recs, services]);
 
-  const dismiss = async (r: SearchResult) => {
-    setRecs((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
-    const d = await getDismissed();
-    d.add(r.tmdb_id);
-    AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify([...d])).catch(() => {});
-  };
-
-  const onAdd = async (r: SearchResult) => {
+  const onAdd = async (r: Rec) => {
     if (!session) return;
+    hTap();
     setAdded((prev) => new Set(prev).add(r.tmdb_id));
     try {
       await addMovie(session.listId, session.memberName, {
@@ -160,135 +173,146 @@ export default function ForYouScreen() {
     } catch { setAdded((prev) => { const n = new Set(prev); n.delete(r.tmdb_id); return n; }); }
   };
 
-  const renderItem = ({ item }: { item: SearchResult }) => {
-    const poster = IMG(item.poster_path, 'w200');
-    const isAdded = added.has(item.tmdb_id);
-    return (
-      <DismissibleRow onDismiss={() => dismiss(item)}>
-      <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={() => setDetailFor(item)}>
-        <View style={styles.poster}>
-          {poster ? <Image source={{ uri: poster }} style={styles.posterImg} />
-            : <Ionicons name="film-outline" size={22} color={theme.textFaint} />}
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.title} numberOfLines={2}>
-            {item.title} {item.year ? <Text style={styles.year}>({item.year})</Text> : null}
-          </Text>
-          <View style={styles.subRow}>
-            {item.rating != null ? (
-              <View style={styles.rating}><Ionicons name="star" size={12} color={theme.gold} /><Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text></View>
-            ) : null}
-            {item.genre ? <Text style={styles.genre}>{item.genre}</Text> : null}
-            {item.runtime ? <Text style={styles.genre}>· {item.runtime} min</Text> : null}
-          </View>
-          <View style={styles.badges}>
-            {!item.providersLoaded ? <Text style={styles.faint}>{t.providersLoading}</Text>
-              : item.ours.length ? item.ours.map((p) => {
-                const l = LOGO(p.logo_path);
-                return l ? <Image key={p.key} source={{ uri: l }} style={styles.logo} /> : null;
-              }) : <Text style={styles.faint}>{t.notOnServices}</Text>}
-          </View>
-        </View>
-        <TouchableOpacity style={[styles.addBtn, isAdded && styles.addBtnDone]} onPress={() => onAdd(item)} disabled={isAdded}>
-          <Ionicons name={isAdded ? 'checkmark' : 'add'} size={22} color="#fff" />
-        </TouchableOpacity>
-      </TouchableOpacity>
-      </DismissibleRow>
-    );
+  // Hide a recommendation permanently (persisted on this device).
+  const dismiss = async (r: Rec) => {
+    hMedium();
+    setRecs((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
+    const d = await getDismissed();
+    d.add(r.tmdb_id);
+    AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify([...d])).catch(() => {});
+  };
+
+  // "Already seen": positive signal — goes onto your Seen list (rate it there later).
+  const markAlreadySeen = async (r: Rec) => {
+    if (!session) return;
+    hTap();
+    setRecs((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
+    setAdded((prev) => new Set(prev).add(r.tmdb_id));
+    try {
+      await addMovie(session.listId, session.memberName, {
+        title: r.title, year: r.year ?? undefined, poster_path: r.poster_path ?? undefined,
+        genre: r.genre ?? undefined, tmdb_id: r.tmdb_id,
+        seen: true, seen_at: new Date().toISOString(),
+      } as any);
+    } catch {}
+  };
+
+  const openActions = (r: Rec) => {
+    hTap();
+    setActionFor(r);
   };
 
   return (
     <Background>
-     <View style={styles.container}>
-      <View style={styles.controls}>
-        <TouchableOpacity style={styles.ctrlBtn} onPress={() => setSortMenuOpen(true)} activeOpacity={0.8}>
-          <Ionicons name="swap-vertical" size={15} color={theme.text} />
-          <Text style={styles.ctrlText} numberOfLines={1}>{SORTS.find((s) => s.key === sort)!.label}</Text>
-          <Ionicons name="chevron-down" size={14} color={theme.textMuted} style={{ marginLeft: 'auto' }} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.ctrlBtn, streamOnly && styles.ctrlBtnOn]}
-          onPress={() => setStreamOnly((v) => !v)} activeOpacity={0.8}
-        >
-          <Ionicons name="tv-outline" size={15} color={streamOnly ? '#fff' : theme.text} />
-          <Text style={[styles.ctrlText, streamOnly && { color: '#fff' }]}>{t.streaming}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
+      {loading && !recs.length ? (
         <View style={styles.center}><ActivityIndicator color={theme.red} /></View>
       ) : (
-        <FlatList
+        <ScrollView
           style={{ flex: 1 }}
-          data={visible}
-          keyExtractor={(r) => String(r.tmdb_id)}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24 }}
+          contentContainerStyle={{ paddingVertical: 14, paddingBottom: 32 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.red} colors={[theme.red]} />}
-          ListEmptyComponent={
+        >
+          {rows.length === 0 ? (
             <View style={styles.empty}>
               <Ionicons name="sparkles-outline" size={34} color={theme.textFaint} />
               <Text style={styles.emptyText}>{t.recomEmpty}</Text>
             </View>
-          }
-        />
+          ) : rows.map((row) => (
+            <Animated.View key={row.key} entering={FadeIn.duration(250)} style={styles.row}>
+              <View style={styles.rowHeader}>
+                <Ionicons name={row.icon} size={16} color={theme.red} />
+                <Text style={styles.rowTitle}>{row.title}</Text>
+              </View>
+              <FlatList
+                horizontal
+                data={row.data}
+                keyExtractor={(r) => `${row.key}-${r.tmdb_id}`}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.rowContent}
+                renderItem={({ item }) => (
+                  <PosterCard
+                    item={item}
+                    isAdded={added.has(item.tmdb_id)}
+                    onPress={() => setDetailFor(item)}
+                    onAction={() => openActions(item)}
+                  />
+                )}
+              />
+            </Animated.View>
+          ))}
+        </ScrollView>
       )}
-     </View>
 
-     <Modal visible={sortMenuOpen} transparent animationType="fade" onRequestClose={() => setSortMenuOpen(false)}>
-       <Pressable style={styles.backdrop} onPress={() => setSortMenuOpen(false)}>
-         <View style={styles.menu}>
-           <Text style={styles.menuTitle}>{t.sortBy}</Text>
-           {SORTS.map((s) => (
-             <TouchableOpacity key={s.key} style={styles.menuItem} onPress={() => { setSort(s.key); setSortMenuOpen(false); }}>
-               <Ionicons name={s.icon} size={18} color={sort === s.key ? theme.red : theme.textMuted} />
-               <Text style={[styles.menuItemText, sort === s.key && { color: theme.red, fontWeight: '600' }]}>{s.label}</Text>
-               {sort === s.key ? <Ionicons name="checkmark" size={18} color={theme.red} style={{ marginLeft: 'auto' }} /> : null}
-             </TouchableOpacity>
-           ))}
-         </View>
-       </Pressable>
-     </Modal>
+      <Modal visible={!!actionFor} transparent animationType="fade" onRequestClose={() => setActionFor(null)}>
+        <Pressable style={styles.backdrop} onPress={() => setActionFor(null)}>
+          <View style={styles.menu}>
+            <Text style={styles.menuTitle} numberOfLines={2}>{actionFor?.title}</Text>
+            {actionFor && added.has(actionFor.tmdb_id) ? (
+              <View style={styles.menuItem}>
+                <Ionicons name="checkmark" size={18} color={theme.green} />
+                <Text style={[styles.menuItemText, { color: theme.textMuted }]}>{t.onList}</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.menuItem} onPress={() => { const r = actionFor!; setActionFor(null); onAdd(r); }}>
+                <Ionicons name="add" size={18} color={theme.red} />
+                <Text style={styles.menuItemText}>{t.addToList}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.menuItem} onPress={() => { const r = actionFor!; setActionFor(null); markAlreadySeen(r); }}>
+              <Ionicons name="eye-outline" size={18} color={theme.text} />
+              <Text style={styles.menuItemText}>{t.alreadySeen}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { const r = actionFor!; setActionFor(null); dismiss(r); }}>
+              <Ionicons name="eye-off-outline" size={18} color={theme.red} />
+              <Text style={[styles.menuItemText, { color: theme.red }]}>{t.notInterested}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCancel} onPress={() => setActionFor(null)}>
+              <Text style={styles.menuCancelText}>{t.cancel}</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
-     <MovieDetails target={detailFor} lang={titleLang} onClose={() => setDetailFor(null)} />
+      <MovieDetails target={detailFor} lang={titleLang} onClose={() => setDetailFor(null)} />
     </Background>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent', paddingHorizontal: 16 },
-  controls: { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 4 },
-  ctrlBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.surface2,
-    borderRadius: radius.md, paddingHorizontal: 12, height: 40, borderWidth: 1, borderColor: theme.border,
-  },
-  ctrlBtnOn: { backgroundColor: theme.red, borderColor: theme.red },
-  ctrlText: { color: theme.text, fontSize: 13, fontWeight: '500' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  card: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.surface,
-    borderRadius: radius.md, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: theme.border,
-  },
-  poster: { width: 46, height: 68, borderRadius: 6, backgroundColor: theme.surface2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  posterImg: { width: 46, height: 68 },
-  title: { color: theme.text, fontSize: 15, fontWeight: '600' },
-  year: { color: theme.textMuted, fontWeight: '400' },
-  subRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 3 },
-  rating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  ratingText: { color: theme.gold, fontSize: 12, fontWeight: '600' },
-  genre: { color: theme.textMuted, fontSize: 12 },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' },
-  logo: { width: 24, height: 24, borderRadius: 6, backgroundColor: '#fff' },
-  faint: { color: theme.textFaint, fontSize: 12 },
-  addBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: theme.red, alignItems: 'center', justifyContent: 'center' },
-  addBtnDone: { backgroundColor: theme.green },
-  dismissBtn: { width: 104, borderRadius: radius.md, backgroundColor: theme.textFaint, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  dismissText: { color: '#fff', fontSize: 11 },
-  empty: { alignItems: 'center', marginTop: 60, paddingHorizontal: 24, gap: 12 },
+  row: { marginBottom: 24 },
+  rowHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, marginBottom: 10 },
+  rowTitle: { color: theme.text, fontSize: 16, fontWeight: '600' },
+  rowContent: { paddingHorizontal: 16, gap: 12 },
+  empty: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32, gap: 12 },
   emptyText: { color: theme.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 21 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 28 },
   menu: { backgroundColor: theme.surfaceOpaque, borderRadius: 16, padding: 8, borderWidth: 1, borderColor: theme.border },
-  menuTitle: { color: theme.textMuted, fontSize: 12, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+  menuTitle: { color: theme.text, fontSize: 15, fontWeight: '600', paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 14, borderRadius: 10 },
   menuItemText: { color: theme.text, fontSize: 15 },
+  menuCancel: { alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: theme.border, marginTop: 4 },
+  menuCancelText: { color: theme.textMuted, fontSize: 14 },
+});
+
+const pc = StyleSheet.create({
+  wrap: { width: 112 },
+  poster: {
+    width: 112, height: 166, borderRadius: 10, backgroundColor: theme.surface2,
+    overflow: 'hidden', borderWidth: 1, borderColor: theme.border,
+  },
+  posterImg: { width: 112, height: 166 },
+  posterEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  badge: {
+    position: 'absolute', top: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(12,8,7,0.75)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '600' },
+  action: {
+    position: 'absolute', bottom: 6, right: 6, width: 28, height: 28, borderRadius: 8,
+    borderWidth: 1.5, borderColor: theme.red, backgroundColor: 'rgba(12,8,7,0.72)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  actionDone: { borderColor: theme.green },
+  title: { color: theme.textMuted, fontSize: 12, lineHeight: 16, marginTop: 6 },
 });

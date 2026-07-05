@@ -4,6 +4,8 @@ import {
   Image, ActivityIndicator, Keyboard, ScrollView, Modal, Pressable, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { hTap } from '../haptics';
 import { theme, radius } from '../theme';
 import { Background } from '../Background';
 import { t } from '../i18n';
@@ -20,6 +22,7 @@ const SORTS: { key: DiscoverSort; label: string; icon: keyof typeof Ionicons.gly
   { key: 'rating', label: t.sortRating, icon: 'star' },
   { key: 'year_desc', label: t.jaarDown, icon: 'arrow-down' },
   { key: 'year_asc', label: t.jaarUp, icon: 'arrow-up' },
+  { key: 'length', label: t.sortLength, icon: 'hourglass-outline' },
 ];
 
 const LENGTHS: { key: Length; label: string }[] = [
@@ -69,7 +72,7 @@ export default function SearchScreen() {
       const ex = await getMovieExtras(r.tmdb_id, titleLang);
       setResults((prev) => prev.map((x) =>
         x.tmdb_id === r.tmdb_id
-          ? { ...x, ours: ex.ours, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true }
+          ? { ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true }
           : x));
     });
   };
@@ -128,6 +131,7 @@ export default function SearchScreen() {
 
   const onAdd = async (r: SearchResult) => {
     if (!session) return;
+    hTap();
     setAdded((prev) => new Set(prev).add(r.tmdb_id));
     try {
       await addMovie(session.listId, session.memberName, {
@@ -158,8 +162,12 @@ export default function SearchScreen() {
       visible = [...visible].sort((a, b) =>
         sort === 'rating' ? (b.rating ?? -1) - (a.rating ?? -1)
           : sort === 'year_desc' ? (b.year ?? 0) - (a.year ?? 0)
-            : (a.year ?? 0) - (b.year ?? 0));
+            : sort === 'length' ? (a.runtime ?? 9999) - (b.runtime ?? 9999)
+              : (a.year ?? 0) - (b.year ?? 0));
     }
+  } else if (sort === 'length') {
+    // Runtime isn't sortable server-side; sort the loaded page client-side.
+    visible = [...visible].sort((a, b) => (a.runtime ?? 9999) - (b.runtime ?? 9999));
   }
 
   const filterCount = (genre ? 1 : 0) + (length !== 'all' ? 1 : 0) + (kids ? 1 : 0);
@@ -189,11 +197,11 @@ export default function SearchScreen() {
               : item.ours.length ? item.ours.map((p) => {
                 const l = LOGO(p.logo_path);
                 return l ? <Image key={p.key} source={{ uri: l }} style={styles.logo} /> : null;
-              }) : <Text style={styles.faint}>{t.notOnServices}</Text>}
+              }) : <Text style={styles.faint}>{item.hasFlatrate ? t.notOnServices : t.notStreamable}</Text>}
           </View>
         </View>
         <TouchableOpacity style={[styles.addBtn, isAdded && styles.addBtnDone]} onPress={() => onAdd(item)} disabled={isAdded}>
-          <Ionicons name={isAdded ? 'checkmark' : 'add'} size={22} color="#fff" />
+          <Ionicons name={isAdded ? 'checkmark' : 'add'} size={20} color={isAdded ? theme.green : theme.red} />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -263,11 +271,16 @@ export default function SearchScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.red} /></View>
       ) : (
-        <FlatList
+        <Animated.FlatList
           style={{ flex: 1 }}
           data={visible}
-          keyExtractor={(r) => String(r.tmdb_id)}
-          renderItem={renderItem}
+          keyExtractor={(r: SearchResult) => String(r.tmdb_id)}
+          renderItem={({ item }: { item: SearchResult }) => (
+            <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(160)}>
+              {renderItem({ item })}
+            </Animated.View>
+          )}
+          itemLayoutAnimation={LinearTransition.duration(180)}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24 }}
           ListFooterComponent={footer}
@@ -342,12 +355,11 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent', paddingHorizontal: 16 },
   searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.surface2,
-    borderRadius: radius.md, paddingHorizontal: 12, height: 44, marginTop: 12,
-    borderWidth: 1, borderColor: theme.border,
+    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.surface,
+    borderRadius: radius.md, paddingHorizontal: 14, height: 46, marginTop: 14,
   },
   input: { flex: 1, color: theme.text, fontSize: 15 },
-  chipWrap: { height: 50, justifyContent: 'center' },
+  chipWrap: { height: 54, justifyContent: 'center' },
   chipRow: { gap: 8, paddingRight: 8, alignItems: 'center' },
   svcChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 38,
@@ -357,17 +369,17 @@ const styles = StyleSheet.create({
   svcLogo: { width: 22, height: 22, borderRadius: 5, backgroundColor: '#fff' },
   svcText: { color: theme.textMuted, fontSize: 13 },
   svcTextOn: { color: theme.text, fontWeight: '600' },
-  controls: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  controls: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   ctrlBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.surface2,
     borderRadius: radius.md, paddingHorizontal: 12, height: 40, borderWidth: 1, borderColor: theme.border,
   },
   ctrlBtnOn: { backgroundColor: theme.red, borderColor: theme.red },
-  ctrlText: { color: theme.text, fontSize: 13, fontWeight: '500' },
+  ctrlText: { flex: 1, color: theme.text, fontSize: 13, fontWeight: '500' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.surface,
-    borderRadius: radius.md, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: theme.border,
+    borderRadius: radius.md, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: theme.border,
   },
   poster: { width: 46, height: 68, borderRadius: 6, backgroundColor: theme.surface2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   posterImg: { width: 46, height: 68 },
@@ -381,8 +393,11 @@ const styles = StyleSheet.create({
   logo: { width: 24, height: 24, borderRadius: 6, backgroundColor: '#fff' },
   faint: { color: theme.textFaint, fontSize: 12 },
   faintCenter: { color: theme.textFaint, fontSize: 14, textAlign: 'center', marginTop: 40 },
-  addBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: theme.red, alignItems: 'center', justifyContent: 'center' },
-  addBtnDone: { backgroundColor: theme.green },
+  addBtn: {
+    width: 38, height: 38, borderRadius: radius.md, borderWidth: 1.5, borderColor: theme.red,
+    backgroundColor: 'rgba(225,29,42,0.10)', alignItems: 'center', justifyContent: 'center',
+  },
+  addBtnDone: { borderColor: theme.green, backgroundColor: 'rgba(63,178,127,0.10)' },
   moreBtn: { marginTop: 4, marginBottom: 20, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: radius.md, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border },
   moreText: { color: theme.text, fontSize: 14, fontWeight: '500' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 28 },

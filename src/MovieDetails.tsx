@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { theme, radius } from './theme';
 import { t } from './i18n';
-import { getMovieExtras, IMG, LOGO, MovieExtras } from './tmdb';
+import { getMovieExtras, IMG, LOGO, MovieExtras, OUR_PROVIDERS } from './tmdb';
 import type { TitleLang } from './ListContext';
 
 export type DetailTarget = {
@@ -23,9 +23,11 @@ export function MovieDetails({ target, lang, onClose }: {
   onClose: () => void;
 }) {
   const [extras, setExtras] = useState<MovieExtras | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setExtras(null);
+    setExpanded(false);
     if (!target) return;
     let cancelled = false;
     getMovieExtras(target.tmdb_id, lang).then((ex) => { if (!cancelled) setExtras(ex); });
@@ -61,14 +63,6 @@ export function MovieDetails({ target, lang, onClose }: {
                 {extras?.genres?.length ? (
                   <Text style={styles.genres}>{extras.genres.join(' · ')}</Text>
                 ) : null}
-                {extras?.ours?.length ? (
-                  <View style={styles.logos}>
-                    {extras.ours.map((p) => {
-                      const l = LOGO(p.logo_path);
-                      return l ? <Image key={p.key} source={{ uri: l }} style={styles.logo} /> : null;
-                    })}
-                  </View>
-                ) : null}
               </View>
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Ionicons name="close" size={22} color={theme.textMuted} />
@@ -79,25 +73,61 @@ export function MovieDetails({ target, lang, onClose }: {
               <ActivityIndicator color={theme.red} style={{ marginVertical: 24 }} />
             ) : (
               <>
-                {extras.overview ? <Text style={styles.overview}>{extras.overview}</Text> : null}
-
-                {extras.trailerKey ? (
-                  <TouchableOpacity
-                    style={styles.trailerBtn}
-                    onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${extras.trailerKey}`)}
-                  >
-                    <Ionicons name="logo-youtube" size={20} color="#fff" />
-                    <Text style={styles.trailerText}>{t.trailer}</Text>
-                  </TouchableOpacity>
+                {extras.overview ? (
+                  <>
+                    <Text style={styles.overview} numberOfLines={expanded ? undefined : 5}>
+                      {extras.overview}
+                    </Text>
+                    {extras.overview.length > 220 ? (
+                      <TouchableOpacity onPress={() => setExpanded((v) => !v)}>
+                        <Text style={styles.readMore}>{expanded ? t.readLess : t.readMore}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
                 ) : null}
 
-                <TouchableOpacity
-                  style={styles.tmdbLink}
-                  onPress={() => Linking.openURL(`https://www.themoviedb.org/movie/${target.tmdb_id}`)}
-                >
-                  <Ionicons name="open-outline" size={15} color={theme.textMuted} />
-                  <Text style={styles.tmdbText}>{t.moreTmdb}</Text>
-                </TouchableOpacity>
+                {extras.ours.length ? (
+                  <>
+                    <Text style={styles.watchOnLabel}>{t.watchOn}</Text>
+                    <View style={styles.watchRow}>
+                      {extras.ours.map((p) => {
+                        const prov = OUR_PROVIDERS.find((x) => x.key === p.key);
+                        const l = LOGO(p.logo_path);
+                        if (!prov) return null;
+                        return (
+                          <TouchableOpacity
+                            key={p.key}
+                            style={styles.watchBtn}
+                            onPress={() => Linking.openURL(prov.watch(title))}
+                          >
+                            {l ? <Image source={{ uri: l }} style={styles.watchLogo} /> : null}
+                            <Text style={styles.watchText}>{p.key}</Text>
+                            <Ionicons name="play" size={14} color="#fff" />
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
+
+                <View style={styles.linksRow}>
+                  {extras.trailerKey ? (
+                    <TouchableOpacity
+                      style={styles.link}
+                      onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${extras.trailerKey}`)}
+                    >
+                      <Ionicons name="logo-youtube" size={15} color={theme.textMuted} />
+                      <Text style={styles.linkText}>{t.trailer}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.link}
+                    onPress={() => Linking.openURL(`https://www.themoviedb.org/movie/${target.tmdb_id}`)}
+                  >
+                    <Ionicons name="open-outline" size={15} color={theme.textMuted} />
+                    <Text style={styles.linkText}>{t.moreTmdb}</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </ScrollView>
@@ -122,15 +152,18 @@ const styles = StyleSheet.create({
   rating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   ratingText: { color: theme.gold, fontSize: 13, fontWeight: '600' },
   genres: { color: theme.textMuted, fontSize: 12, marginTop: 6 },
-  logos: { flexDirection: 'row', gap: 6, marginTop: 10 },
-  logo: { width: 26, height: 26, borderRadius: 6, backgroundColor: '#fff' },
   closeBtn: { position: 'absolute', right: -4, top: -4, padding: 6 },
   overview: { color: theme.text, fontSize: 14, lineHeight: 21, marginTop: 14 },
-  trailerBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: theme.red, borderRadius: radius.md, height: 48, marginTop: 16,
+  readMore: { color: theme.red, fontSize: 13, fontWeight: '600', marginTop: 6 },
+  watchOnLabel: { color: theme.textMuted, fontSize: 13, marginTop: 18, marginBottom: 8 },
+  watchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  watchBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, height: 46,
+    borderRadius: radius.md, backgroundColor: theme.red,
   },
-  trailerText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  tmdbLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },
-  tmdbText: { color: theme.textMuted, fontSize: 13 },
+  watchLogo: { width: 24, height: 24, borderRadius: 6, backgroundColor: '#fff' },
+  watchText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  linksRow: { flexDirection: 'row', justifyContent: 'center', gap: 24, paddingVertical: 16 },
+  link: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  linkText: { color: theme.textMuted, fontSize: 13 },
 });
