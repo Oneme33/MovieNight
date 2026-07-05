@@ -121,6 +121,10 @@ const nl = {
   copied: 'Gekopieerd',
   copiedBody: (c: string) => `Koppelcode ${c} staat op je klembord.`,
   shareMsg: (c: string) => `Doe mee met onze lijst! Koppelcode: ${c}`,
+  partnerAdded: (name: string, title: string) => `${name} voegde "${title}" toe`,
+  partnerRated: (name: string, title: string, score: number) => `${name} gaf "${title}" een ${score}`,
+  catchUp: (name: string, n: number) =>
+    n === 1 ? `${name} heeft 1 nieuwe film toegevoegd` : `${name} heeft ${n} nieuwe films toegevoegd`,
 };
 
 const en: typeof nl = {
@@ -236,6 +240,10 @@ const en: typeof nl = {
   copied: 'Copied',
   copiedBody: (c: string) => `Pairing code ${c} is on your clipboard.`,
   shareMsg: (c: string) => `Join our list! Pairing code: ${c}`,
+  partnerAdded: (name: string, title: string) => `${name} added "${title}"`,
+  partnerRated: (name: string, title: string, score: number) => `${name} rated "${title}" a ${score}`,
+  catchUp: (name: string, n: number) =>
+    n === 1 ? `${name} added 1 new movie` : `${name} added ${n} new movies`,
 };
 
 const dict = { nl, en };

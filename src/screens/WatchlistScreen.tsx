@@ -11,7 +11,7 @@ import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeabl
 import { TouchableOpacity as GHTouchable } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle, type SharedValue,
-  FadeIn, FadeInDown, SlideOutRight, SlideOutLeft, LinearTransition, ZoomIn,
+  FadeIn, FadeOut, FadeInDown, SlideOutRight, SlideOutLeft, LinearTransition, ZoomIn,
 } from 'react-native-reanimated';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { Dimensions } from 'react-native';
@@ -279,6 +279,34 @@ export default function WatchlistScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [gridActionFor, setGridActionFor] = useState<MovieRow | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [newsMsg, setNewsMsg] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const newsChecked = useRef(false);
+
+  const showToast = useCallback((msg: string) => {
+    hTap();
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // In-app notification when the partner adds or rates a movie while the app is open.
+  const onRealtime = useCallback((payload: any) => {
+    const me = session?.memberName;
+    if (!me) return;
+    if (payload.eventType === 'INSERT') {
+      const n = payload.new as MovieRow;
+      if (n?.added_by && n.added_by !== me && n.title) showToast(t.partnerAdded(n.added_by, n.title));
+    } else if (payload.eventType === 'UPDATE') {
+      const n = payload.new as MovieRow;
+      const oldR = ((payload.old?.ratings as Record<string, number>) ?? {});
+      const newR = n?.ratings ?? {};
+      for (const [name, score] of Object.entries(newR)) {
+        if (name !== me && oldR[name] !== score) { showToast(t.partnerRated(name, n.title, score)); break; }
+      }
+    }
+  }, [session, showToast]);
 
   // Remember the chosen view.
   useEffect(() => {
@@ -323,10 +351,24 @@ export default function WatchlistScreen() {
       .channel(`movies-${session.listId}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'movies', filter: `list_id=eq.${session.listId}` },
-        () => load())
+        (payload: any) => { onRealtime(payload); load(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [session, load]);
+  }, [session, load, onRealtime]);
+
+  // Catch-up banner: what did the partner add since your last visit?
+  useEffect(() => {
+    if (!session || newsChecked.current || !movies.length) return;
+    newsChecked.current = true;
+    const key = `filmavond.lastSeen.${session.listId}`;
+    AsyncStorage.getItem(key).then((prev) => {
+      AsyncStorage.setItem(key, new Date().toISOString()).catch(() => {});
+      if (!prev) return;
+      const me = session.memberName;
+      const news = movies.filter((m) => m.added_by && m.added_by !== me && m.created_at > prev);
+      if (news.length) setNewsMsg(t.catchUp(news[0].added_by!, news.length));
+    }).catch(() => {});
+  }, [movies, session]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { setExtras({}); }, [titleLang]);
@@ -554,6 +596,15 @@ export default function WatchlistScreen() {
   return (
     <Background>
       {tabsBar}
+      {newsMsg ? (
+        <Animated.View entering={FadeInDown.duration(250)} style={styles.newsBanner}>
+          <Ionicons name="notifications-outline" size={16} color={theme.red} />
+          <Text style={styles.newsText} numberOfLines={2}>{newsMsg}</Text>
+          <TouchableOpacity onPress={() => setNewsMsg(null)} style={{ padding: 4 }}>
+            <Ionicons name="close" size={16} color={theme.textMuted} />
+          </TouchableOpacity>
+        </Animated.View>
+      ) : null}
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={theme.red} /></View>
       ) : viewMode === 'grid' ? (
@@ -687,6 +738,13 @@ export default function WatchlistScreen() {
         <TouchableOpacity style={styles.fab} onPress={openRoulette} activeOpacity={0.85}>
           <Ionicons name="dice-outline" size={26} color="#fff" />
         </TouchableOpacity>
+      ) : null}
+
+      {toast ? (
+        <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOut.duration(200)} style={styles.toast} pointerEvents="none">
+          <Ionicons name="notifications" size={14} color={theme.red} />
+          <Text style={styles.toastText} numberOfLines={2}>{toast}</Text>
+        </Animated.View>
       ) : null}
 
       <Modal visible={rouletteOpen} transparent animationType="fade" onRequestClose={closeRoulette}>
@@ -856,6 +914,18 @@ const styles = StyleSheet.create({
     backgroundColor: theme.red, alignItems: 'center', justifyContent: 'center',
     elevation: 6, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
   },
+  newsBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 6,
+    paddingHorizontal: 12, paddingVertical: 10, borderRadius: radius.md,
+    backgroundColor: theme.redSoft, borderWidth: 1, borderColor: theme.redDark,
+  },
+  newsText: { flex: 1, color: theme.text, fontSize: 13 },
+  toast: {
+    position: 'absolute', top: 72, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(20,13,11,0.96)', borderWidth: 1, borderColor: theme.border,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 22, maxWidth: '86%', elevation: 6,
+  },
+  toastText: { color: theme.text, fontSize: 13 },
   tabsBar: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.md, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border },
   tabOn: { backgroundColor: theme.red, borderColor: theme.red },
