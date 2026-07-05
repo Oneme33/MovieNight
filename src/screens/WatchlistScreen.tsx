@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   Image, FlatList, RefreshControl, Modal, Pressable, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -338,6 +338,21 @@ export default function WatchlistScreen() {
       const ms = await fetchMovies(session.listId);
       setMovies(ms);
       AsyncStorage.setItem(`filmavond.movies.${session.listId}`, JSON.stringify(ms)).catch(() => {});
+
+      // Catch-up banner: computed once per app open, from fresh server data
+      // (never from the offline cache, so late-arriving movies aren't missed).
+      if (!newsChecked.current) {
+        newsChecked.current = true;
+        const key = `filmavond.lastSeen.${session.listId}`;
+        const prev = await AsyncStorage.getItem(key).catch(() => null);
+        AsyncStorage.setItem(key, new Date().toISOString()).catch(() => {});
+        if (prev) {
+          const prevT = Date.parse(prev);
+          const me = session.memberName;
+          const news = ms.filter((m) => m.added_by && m.added_by !== me && Date.parse(m.created_at) > prevT);
+          if (news.length) setNewsMsg(t.catchUp(news[0].added_by!, news.length));
+        }
+      }
     } catch {
       // Offline or transient error: keep showing the cached list.
     } finally { setLoading(false); }
@@ -356,19 +371,6 @@ export default function WatchlistScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [session, load, onRealtime]);
 
-  // Catch-up banner: what did the partner add since your last visit?
-  useEffect(() => {
-    if (!session || newsChecked.current || !movies.length) return;
-    newsChecked.current = true;
-    const key = `filmavond.lastSeen.${session.listId}`;
-    AsyncStorage.getItem(key).then((prev) => {
-      AsyncStorage.setItem(key, new Date().toISOString()).catch(() => {});
-      if (!prev) return;
-      const me = session.memberName;
-      const news = movies.filter((m) => m.added_by && m.added_by !== me && m.created_at > prev);
-      if (news.length) setNewsMsg(t.catchUp(news[0].added_by!, news.length));
-    }).catch(() => {});
-  }, [movies, session]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { setExtras({}); }, [titleLang]);
