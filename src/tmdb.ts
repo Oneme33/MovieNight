@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TMDB_TOKEN } from './config';
 import { uiLang } from './i18n';
 import type { TitleLang } from './ListContext';
@@ -250,11 +251,101 @@ function parseCertAge(data: any): number | null {
 }
 
 // Rating, NL services, runtime, overview, genres and trailer in one cached call.
-const extrasCache = new Map<string, MovieExtras>();
+// Cached in memory, deduplicated while in flight, throttled, and persisted on the
+// device so a cold start doesn't have to refetch the whole list.
+const extrasCache = new Map<string, { at: number; ex: MovieExtras }>();
+const extrasInFlight = new Map<string, Promise<MovieExtras>>();
+const EXTRAS_STORE = 'filmavond.extras.v1';
+const EXTRAS_MAX_AGE = 3 * 24 * 3600 * 1000; // streaming availability changes; refresh after 3 days
+const EXTRAS_MAX_ENTRIES = 500;
+const MAX_CONCURRENT = 6;
+
+let hydrated: Promise<void> | null = null;
+function hydrateExtras(): Promise<void> {
+  if (!hydrated) {
+    hydrated = AsyncStorage.getItem(EXTRAS_STORE).then((raw) => {
+      if (!raw) return;
+      const now = Date.now();
+      for (const [k, v] of Object.entries(JSON.parse(raw) as Record<string, { at: number; ex: MovieExtras }>)) {
+        if (now - v.at < EXTRAS_MAX_AGE && !extrasCache.has(k)) extrasCache.set(k, v);
+      }
+    }).catch(() => {});
+  }
+  return hydrated;
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSave() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const entries = [...extrasCache.entries()].sort((a, b) => b[1].at - a[1].at).slice(0, EXTRAS_MAX_ENTRIES);
+    AsyncStorage.setItem(EXTRAS_STORE, JSON.stringify(Object.fromEntries(entries))).catch(() => {});
+  }, 2000);
+}
+
+let active = 0;
+const queue: (() => void)[] = [];
+async function throttled<T>(fn: () => Promise<T>): Promise<T> {
+  if (active >= MAX_CONCURRENT) await new Promise<void>((resolve) => queue.push(resolve));
+  else active++;
+  try { return await fn(); } finally {
+    const next = queue.shift();
+    if (next) next(); // hand the slot straight to the next waiter
+    else active--;
+  }
+}
+
+export const extrasFailed = (ex: MovieExtras) => ex === EMPTY_EXTRAS;
 
 export async function getMovieExtras(tmdbId: number, lang: TitleLang = 'en'): Promise<MovieExtras> {
   const key = `${tmdbId}:${lang}`;
-  if (extrasCache.has(key)) return extrasCache.get(key)!;
+  await hydrateExtras();
+  const hit = extrasCache.get(key);
+  if (hit) return hit.ex;
+  const pending = extrasInFlight.get(key);
+  if (pending) return pending;
+  const p = throttled(() => fetchExtras(tmdbId, lang)).then((ex) => {
+    if (ex !== EMPTY_EXTRAS) {
+      extrasCache.set(key, { at: Date.now(), ex });
+      scheduleSave();
+    }
+    return ex;
+  }).finally(() => extrasInFlight.delete(key));
+  extrasInFlight.set(key, p);
+  return p;
+}
+
+// Loads extras for many movies and reports them in batches (not one re-render per movie).
+// Failed lookups are left out, so a later call can retry them.
+export function loadExtrasBatched(
+  ids: number[],
+  lang: TitleLang,
+  onBatch: (batch: Record<number, MovieExtras>) => void,
+  onFail?: (id: number) => void,
+): () => void {
+  let pending: Record<number, MovieExtras> = {};
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
+  const flush = () => {
+    timer = null;
+    if (cancelled) return;
+    const batch = pending;
+    pending = {};
+    if (Object.keys(batch).length) onBatch(batch);
+  };
+  [...new Set(ids)].forEach((id) => {
+    getMovieExtras(id, lang).then((ex) => {
+      if (cancelled) return;
+      if (extrasFailed(ex)) { onFail?.(id); return; }
+      pending[id] = ex;
+      if (!timer) timer = setTimeout(flush, 200);
+    });
+  });
+  return () => { cancelled = true; if (timer) clearTimeout(timer); };
+}
+
+async function fetchExtras(tmdbId: number, lang: TitleLang): Promise<MovieExtras> {
   try {
     const url = `${BASE}/movie/${tmdbId}?language=${apiLang(lang)}`
       + `&append_to_response=watch/providers,videos,release_dates&include_video_language=en,nl,null`;
@@ -279,7 +370,6 @@ export async function getMovieExtras(tmdbId: number, lang: TitleLang = 'en'): Pr
       certAge: parseCertAge(data),
       trailerKey: trailer?.key ?? null,
     };
-    extrasCache.set(key, extras);
     return extras;
   } catch {
     return EMPTY_EXTRAS;

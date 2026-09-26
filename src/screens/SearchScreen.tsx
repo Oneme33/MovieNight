@@ -11,11 +11,12 @@ import { Background } from '../Background';
 import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import {
-  searchMovies, discover, getMovieExtras, IMG, LOGO,
+  searchMovies, discover, loadExtrasBatched, IMG, LOGO,
   OUR_PROVIDERS, GENRE_OPTIONS, SearchResult, DiscoverSort, Length,
 } from '../tmdb';
 import { addMovie, fetchMovies } from '../db';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
+import { SkeletonList } from '../Loader';
 
 const SORTS: { key: DiscoverSort; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'popular', label: t.sortPopular, icon: 'flame' },
@@ -68,12 +69,13 @@ export default function SearchScreen() {
   }, [services]);
 
   const fetchExtrasFor = (list: SearchResult[]) => {
-    list.forEach(async (r) => {
-      const ex = await getMovieExtras(r.tmdb_id, titleLang);
-      setResults((prev) => prev.map((x) =>
-        x.tmdb_id === r.tmdb_id
+    loadExtrasBatched(list.map((r) => r.tmdb_id), titleLang, (batch) => {
+      setResults((prev) => prev.map((x) => {
+        const ex = batch[x.tmdb_id];
+        return ex
           ? { ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true }
-          : x));
+          : x;
+      }));
     });
   };
 
@@ -269,7 +271,7 @@ export default function SearchScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.red} /></View>
+        <View style={{ marginHorizontal: -16, marginTop: -8 }}><SkeletonList count={7} noHeader /></View>
       ) : (
         <Animated.FlatList
           style={{ flex: 1 }}

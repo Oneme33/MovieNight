@@ -49,36 +49,47 @@ export function ListProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      let saved: Session | null = null;
       try {
-        // Ensure an (anonymous) auth session so locked-down access works.
-        const { data: { session: authSession } } = await supabase.auth.getSession();
-        if (!authSession) await supabase.auth.signInAnonymously();
-
-        const lang = await AsyncStorage.getItem(LANG_KEY);
+        const [lang, svcRaw, raw] = await Promise.all([
+          AsyncStorage.getItem(LANG_KEY),
+          AsyncStorage.getItem(SERVICES_KEY),
+          AsyncStorage.getItem(STORAGE_KEY),
+        ]);
         if (lang === 'en' || lang === 'nl' || lang === 'original') setTitleLangState(lang);
-
-        const svcRaw = await AsyncStorage.getItem(SERVICES_KEY);
         if (svcRaw) {
           const parsed = JSON.parse(svcRaw);
           if (Array.isArray(parsed) && parsed.length) setServicesState(parsed);
         }
-
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const s: Session = JSON.parse(raw);
-          try {
-            // (Re)establish membership — migrates v1.0 users and reinstalls.
-            await joinList(s.code, s.memberName);
-            setSessionState(s);
-          } catch (e: any) {
-            if (String(e?.message ?? e).includes('code_not_found')) {
-              await AsyncStorage.removeItem(STORAGE_KEY);
-            } else {
-              setSessionState(s); // keep session on transient/offline errors
-            }
-          }
-        }
+        if (raw) saved = JSON.parse(raw);
       } catch {}
+
+      // Ensure an (anonymous) auth session so locked-down access works.
+      let hadAuth = false;
+      try {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        hadAuth = !!authSession;
+        if (!authSession) await supabase.auth.signInAnonymously();
+      } catch {}
+
+      if (saved) {
+        const s = saved;
+        // (Re)establish membership — migrates v1.0 users and reinstalls. A known user is
+        // already a member, so the app opens right away and this runs in the background.
+        const rejoin = joinList(s.code, s.memberName).catch(async (e: any) => {
+          if (String(e?.message ?? e).includes('code_not_found')) {
+            await AsyncStorage.removeItem(STORAGE_KEY);
+            setSessionState(null);
+            return 'gone';
+          }
+          return 'offline'; // keep the session on transient/offline errors
+        });
+        if (hadAuth) {
+          setSessionState(s);
+        } else if ((await rejoin) !== 'gone') {
+          setSessionState(s);
+        }
+      }
       setLoading(false);
     })();
   }, []);

@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, ScrollView, TouchableOpacity, StyleSheet, Image,
-  ActivityIndicator, RefreshControl, Modal, Pressable,
+  RefreshControl, Modal, Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,8 +14,9 @@ import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { MovieRow } from '../supabase';
 import { fetchMovies, addMovie } from '../db';
-import { recommendationsFor, getMovieExtras, IMG, SearchResult } from '../tmdb';
+import { recommendationsFor, loadExtrasBatched, IMG, SearchResult } from '../tmdb';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
+import { SkeletonRows } from '../Loader';
 
 type Rec = SearchResult & { score: number };
 
@@ -130,15 +131,16 @@ export default function ForYouScreen() {
     setLoading(false);
 
     // Load runtime/age/services per movie (cached) so the theme rows can fill up.
-    top.forEach(async (r) => {
-      const ex = await getMovieExtras(r.tmdb_id, titleLang);
-      setRecs((prev) => prev.map((x) =>
-        x.tmdb_id === r.tmdb_id
+    loadExtrasBatched(top.map((r) => r.tmdb_id), titleLang, (batch) => {
+      setRecs((prev) => prev.map((x) => {
+        const ex = batch[x.tmdb_id];
+        return ex
           ? {
               ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating,
               runtime: ex.runtime, certAge: ex.certAge, providersLoaded: true,
             }
-          : x));
+          : x;
+      }));
     });
   }, [session, titleLang, seedSig, recs.length]);
 
@@ -205,7 +207,7 @@ export default function ForYouScreen() {
   return (
     <Background>
       {loading && !recs.length ? (
-        <View style={styles.center}><ActivityIndicator color={theme.red} /></View>
+        <SkeletonRows />
       ) : (
         <ScrollView
           style={{ flex: 1 }}

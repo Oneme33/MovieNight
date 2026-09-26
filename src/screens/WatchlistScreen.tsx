@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet,
   Image, FlatList, RefreshControl, Modal, Pressable, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +22,8 @@ import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { supabase, MovieRow } from '../supabase';
 import { fetchMovies, deleteMovie, persistOrder, markSeen, unmarkSeen } from '../db';
-import { IMG, LOGO, getMovieExtras, MovieExtras, GENRE_OPTIONS, Length } from '../tmdb';
+import { IMG, LOGO, loadExtrasBatched, MovieExtras, GENRE_OPTIONS, Length } from '../tmdb';
+import { SkeletonList } from '../Loader';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 
 type SortMode = 'nieuw' | 'waardering' | 'titel' | 'streaming' | 'lengte' | 'handmatig';
@@ -373,15 +374,23 @@ export default function WatchlistScreen() {
 
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
-  useEffect(() => { setExtras({}); }, [titleLang]);
+  // Each movie's extras are requested once per title language; results arrive in batches.
+  const requested = useRef<Set<string>>(new Set());
+  const langRef = useRef(titleLang);
+  useEffect(() => { langRef.current = titleLang; setExtras({}); }, [titleLang]);
   useEffect(() => {
-    movies.forEach(async (m) => {
-      if (m.tmdb_id && !extras[m.tmdb_id]) {
-        const ex = await getMovieExtras(m.tmdb_id, titleLang);
-        setExtras((prev) => ({ ...prev, [m.tmdb_id as number]: ex }));
-      }
-    });
-  }, [movies, titleLang, extras]);
+    const ids = movies
+      .map((m) => m.tmdb_id)
+      .filter((id): id is number => !!id && !requested.current.has(`${id}:${titleLang}`));
+    if (!ids.length) return;
+    ids.forEach((id) => requested.current.add(`${id}:${titleLang}`));
+    const lang = titleLang;
+    loadExtrasBatched(
+      ids, lang,
+      (batch) => { if (langRef.current === lang) setExtras((prev) => ({ ...prev, ...batch })); },
+      (id) => requested.current.delete(`${id}:${lang}`),
+    );
+  }, [movies, titleLang]);
 
   const displayTitle = useCallback(
     (m: MovieRow) => (m.tmdb_id && extras[m.tmdb_id]?.title) || m.title,
@@ -608,7 +617,7 @@ export default function WatchlistScreen() {
         </Animated.View>
       ) : null}
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.red} /></View>
+        <SkeletonList variant={viewMode} />
       ) : viewMode === 'grid' ? (
         <FlatList
           key={`grid-${tab}`}

@@ -70,7 +70,7 @@ export function MovieDetails({ target, lang, onClose }: {
             </View>
 
             {!extras ? (
-              <ActivityIndicator color={theme.red} style={{ marginVertical: 24 }} />
+              <ActivityIndicator size="large" color={theme.red} style={{ marginVertical: 28 }} />
             ) : (
               <>
                 {extras.overview ? (

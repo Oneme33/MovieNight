@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -15,6 +15,7 @@ import SearchScreen from './src/screens/SearchScreen';
 import ForYouScreen from './src/screens/ForYouScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import { SplashLoader } from './src/Loader';
 
 const Tab = createBottomTabNavigator();
 
@@ -83,13 +84,7 @@ function MainTabs() {
 
 function Root() {
   const { session, loading } = useSession();
-  if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={theme.red} />
-      </View>
-    );
-  }
+  if (loading) return <SplashLoader />;
   return session ? <MainTabs /> : <OnboardingScreen />;
 }
 
