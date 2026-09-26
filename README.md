@@ -15,17 +15,27 @@ in Dutch.
 - **To watch / Seen tabs** with a **list ↔ poster-grid** toggle (remembered)
 - **Search & browse** by streaming service (Netflix, Disney+, Prime Video, Max,
   Videoland, Viaplay, SkyShowtime, Apple TV+ — selectable in Settings), with
-  filters (length, genre, kid-friendly) and sorts (popular, rating, year, runtime)
+  filters (length incl. < 30 min, year range, genre dropdown, kid-friendly, hide seen /
+  hide watchlist) and sorts (popular, rating, year, runtime)
 - **For You** — themed recommendation rows built from your 7+ ratings and your list:
   best match tonight, nice and short, highest rated, on your services, for the kids,
-  hidden gems; per-poster actions (add / already seen / not interested)
+  hidden gems; per-poster actions (add / already seen / not interested); a **"More"**
+  tile opens any row as a grid with load-more
+- **Just streaming in the US** — recent US digital releases with their Dutch status
+  (on your service / for rent, e.g. Pathé Thuis / not in NL yet)
+- **Taste match meter** — how well your ratings line up, the tougher critic, your shared
+  favourite and your biggest debate
 - **Movie details** — overview with read-more, **"Watch on …" deep-link buttons**
   as the primary action, trailer and TMDB as secondary links
 - **Movie roulette** 🎲 — Material FAB, 10s countdown that accelerates into a
-  slot-machine poster spin and lands on the winner with confetti
+  slot-machine poster spin (with escalating haptics) and lands on the winner with confetti
 - **Per-person ratings** (editable later without changing the watch date)
-- **Offline cache** — the list and recommendations open instantly, even without internet
+- **Offline cache** — the list, movie details and recommendations open instantly, even
+  without internet; TMDB requests are deduplicated and throttled
 - Micro-animations + haptics throughout; cinema-red theme with a photo backdrop
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed per version and [TODO.md](TODO.md) for
+open work and ideas.
 
 ## Setup
 

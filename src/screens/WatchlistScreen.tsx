@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { Dimensions } from 'react-native';
-import { hTap, hMedium, hSuccess, hWarn, hSelect } from '../haptics';
+import { hTap, hMedium, hHeavy, hSuccess, hWarn, hSelect } from '../haptics';
 import { theme, radius } from '../theme';
 import { Background } from '../Background';
 import { t } from '../i18n';
@@ -502,6 +502,14 @@ export default function WatchlistScreen() {
     return () => clearTimeout(timer);
   }, [rouletteOpen, rouletteResult, spinning, countdown, startSpin]);
 
+  // Final countdown you can feel: 5 → one light tap … 1 → five heavy thumps, then the reveal.
+  useEffect(() => {
+    if (!rouletteOpen || rouletteResult || countdown < 1 || countdown > 5) return;
+    const hit = countdown >= 4 ? hTap : countdown >= 2 ? hMedium : hHeavy;
+    const timers = Array.from({ length: 6 - countdown }, (_, i) => setTimeout(hit, i * 90));
+    return () => timers.forEach(clearTimeout);
+  }, [countdown, rouletteOpen, rouletteResult]);
+
   const openRoulette = () => {
     hMedium();
     if (spinTimer.current) clearTimeout(spinTimer.current);
@@ -837,8 +845,9 @@ export default function WatchlistScreen() {
       </Modal>
 
       <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
-          <Pressable style={styles.filterSheet}>
+        <View style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterOpen(false)} />
+          <View style={styles.filterSheet}>
             <View style={styles.filterHeaderRow}>
               <Text style={styles.filterHeader}>{t.filters}</Text>
               <TouchableOpacity onPress={() => { setFGenre(null); setFLength('all'); setFKids(false); }}>
@@ -866,8 +875,8 @@ export default function WatchlistScreen() {
             <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterOpen(false)}>
               <Text style={styles.applyText}>{t.apply}</Text>
             </TouchableOpacity>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       <Modal visible={!!gridActionFor} transparent animationType="fade" onRequestClose={() => setGridActionFor(null)}>

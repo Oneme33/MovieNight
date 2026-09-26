@@ -86,6 +86,7 @@ export type SearchResult = {
   hasFlatrate?: boolean;
   providersLoaded: boolean;
   extrasLoaded?: boolean; // runtime/age/services looked up (or the lookup failed)
+  nlRent?: string[];
 };
 
 // Unreleased movies are hidden everywhere — you can't watch them yet.
@@ -204,15 +205,54 @@ export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
   return { results: out.results.map((r: SearchResult) => ({ ...r })), totalPages: out.totalPages };
 }
 
+// Movies that just came out digitally in the US (streaming / rent). They usually reach
+// Dutch services and stores like Pathé Thuis a little later.
+const usNewCache = new Map<string, DiscoverPage>();
+const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+
+export async function usNewPage(lang: TitleLang, page: number): Promise<DiscoverPage> {
+  const key = `${lang}:${page}`;
+  const hit = usNewCache.get(key);
+  if (hit) return hit;
+  const url = `${BASE}/discover/movie?language=${apiLang(lang)}&include_adult=false`
+    + `&region=US&with_release_type=4&release_date.gte=${daysAgo(45)}&release_date.lte=${today()}`
+    + `&sort_by=popularity.desc&vote_count.gte=20&page=${page}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`TMDB discover failed (${res.status})`);
+  const data = await res.json();
+  const out: DiscoverPage = {
+    results: (data.results ?? []).map((r: any): SearchResult => ({
+      tmdb_id: r.id,
+      title: pickTitle(lang, r.title, r.original_title),
+      year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
+      poster_path: r.poster_path ?? null,
+      genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
+      rating: typeof r.vote_average === 'number' && r.vote_average > 0 ? r.vote_average : null,
+      popularity: typeof r.popularity === 'number' ? r.popularity : 0,
+      ours: [],
+      providersLoaded: false,
+    })),
+    totalPages: Math.min(data.total_pages ?? 1, 500),
+  };
+  usNewCache.set(key, out);
+  return out;
+}
+
+export async function usNewOnDigital(lang: TitleLang = 'en'): Promise<SearchResult[]> {
+  const pages = await Promise.all([1, 2].map((p) => usNewPage(lang, p)));
+  const seen = new Set<number>();
+  return pages.flatMap((p) => p.results).filter((r) => !seen.has(r.tmdb_id) && !!seen.add(r.tmdb_id));
+}
+
 // Recommendations based on one movie (TMDB "recommendations"), cached per session.
 const recsCache = new Map<string, SearchResult[]>();
 
-export async function recommendationsFor(tmdbId: number, lang: TitleLang = 'en'): Promise<SearchResult[]> {
-  const key = `${tmdbId}:${lang}`;
+export async function recommendationsFor(tmdbId: number, lang: TitleLang = 'en', page = 1): Promise<SearchResult[]> {
+  const key = `${tmdbId}:${lang}:${page}`;
   const hit = recsCache.get(key);
   if (hit) return hit;
   try {
-    const url = `${BASE}/movie/${tmdbId}/recommendations?language=${apiLang(lang)}&page=1`;
+    const url = `${BASE}/movie/${tmdbId}/recommendations?language=${apiLang(lang)}&page=${page}`;
     const res = await fetch(url, { headers });
     if (!res.ok) return [];
     const data = await res.json();
@@ -245,11 +285,12 @@ export type MovieExtras = {
   genreIds: number[];
   certAge: number | null; // minimum age from NL (Kijkwijzer) or US certification
   trailerKey: string | null; // YouTube video key
+  nlRent: string[]; // NL rent/buy stores (e.g. Pathé Thuis)
 };
 
 const EMPTY_EXTRAS: MovieExtras = {
   rating: null, ours: [], hasFlatrate: false, title: null, runtime: null, overview: '', genres: [],
-  genreIds: [], certAge: null, trailerKey: null,
+  genreIds: [], certAge: null, trailerKey: null, nlRent: [],
 };
 
 function parseCertAge(data: any): number | null {
@@ -275,7 +316,7 @@ function parseCertAge(data: any): number | null {
 // device so a cold start doesn't have to refetch the whole list.
 const extrasCache = new Map<string, { at: number; ex: MovieExtras }>();
 const extrasInFlight = new Map<string, Promise<MovieExtras>>();
-const EXTRAS_STORE = 'filmavond.extras.v1';
+const EXTRAS_STORE = 'filmavond.extras.v2';
 const EXTRAS_MAX_AGE = 3 * 24 * 3600 * 1000; // streaming availability changes; refresh after 3 days
 const EXTRAS_MAX_ENTRIES = 500;
 const MAX_CONCURRENT = 6;
@@ -336,6 +377,16 @@ export async function getMovieExtras(tmdbId: number, lang: TitleLang = 'en'): Pr
   return p;
 }
 
+// Extras for many movies at once (throttled); failed lookups are left out.
+export async function getExtrasMany(ids: number[], lang: TitleLang): Promise<Record<number, MovieExtras>> {
+  const out: Record<number, MovieExtras> = {};
+  await Promise.all([...new Set(ids)].map(async (id) => {
+    const ex = await getMovieExtras(id, lang);
+    if (!extrasFailed(ex)) out[id] = ex;
+  }));
+  return out;
+}
+
 // Loads extras for many movies and reports them in batches (not one re-render per movie).
 // Failed lookups are left out, so a later call can retry them.
 export function loadExtrasBatched(
@@ -372,7 +423,9 @@ async function fetchExtras(tmdbId: number, lang: TitleLang): Promise<MovieExtras
     const res = await fetch(url, { headers });
     if (!res.ok) return EMPTY_EXTRAS;
     const data = await res.json();
-    const flat = data['watch/providers']?.results?.NL?.flatrate ?? [];
+    const nlProv = data['watch/providers']?.results?.NL ?? {};
+    const flat = nlProv.flatrate ?? [];
+    const nlRent = [...new Set<string>([...(nlProv.rent ?? []), ...(nlProv.buy ?? [])].map((p: any) => p.provider_name))];
     const vids = data.videos?.results ?? [];
     const trailer =
       vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') ??
@@ -389,6 +442,7 @@ async function fetchExtras(tmdbId: number, lang: TitleLang): Promise<MovieExtras
       genreIds: ids,
       certAge: parseCertAge(data),
       trailerKey: trailer?.key ?? null,
+      nlRent,
     };
     return extras;
   } catch {

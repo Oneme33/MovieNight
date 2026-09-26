@@ -63,6 +63,8 @@ export default function SearchScreen() {
   const [length, setLength] = useState<Length>('all');
   const [kids, setKids] = useState(false);
   const [hideSeen, setHideSeen] = useState(true);
+  const [hideListed, setHideListed] = useState(true);
+  const [listedIds, setListedIds] = useState<Set<number>>(new Set());
   const [seenIds, setSeenIds] = useState<Set<number>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const [yearFrom, setYearFrom] = useState<number | null>(null);
@@ -77,6 +79,8 @@ export default function SearchScreen() {
     fetchMovies(session.listId).then((ms) => {
       setAdded(new Set(ms.map((m) => m.tmdb_id).filter(Boolean) as number[]));
       setSeenIds(new Set(ms.filter((m) => m.seen && m.tmdb_id).map((m) => m.tmdb_id as number)));
+      // Snapshot on focus: a movie you add right now stays visible (with its checkmark).
+      setListedIds(new Set(ms.filter((m) => !m.seen && m.tmdb_id).map((m) => m.tmdb_id as number)));
     }).catch(() => {});
   }, [session]));
 
@@ -183,6 +187,7 @@ export default function SearchScreen() {
     visible = visible.filter((r) => r.runtime != null && matchesLength(r.runtime, length));
   }
   if (!query.trim() && hideSeen && seenIds.size) visible = visible.filter((r) => !seenIds.has(r.tmdb_id));
+  if (!query.trim() && hideListed && listedIds.size) visible = visible.filter((r) => !listedIds.has(r.tmdb_id));
   if (query.trim()) {
     const key = provKey(service);
     if (key) visible = visible.filter((r) => !r.providersLoaded || r.ours.some((o) => o.key === key));
@@ -345,15 +350,18 @@ export default function SearchScreen() {
      </Modal>
 
      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={closeFilters}>
-       <Pressable style={styles.backdrop} onPress={closeFilters}>
-         <Pressable style={styles.filterSheet}>
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+       <View style={styles.backdrop}>
+         {/* Tap-outside layer sits behind the sheet, so it never competes with scrolling. */}
+         <Pressable style={StyleSheet.absoluteFill} onPress={closeFilters} />
+         <View style={styles.filterSheet}>
            <View style={styles.filterHeaderRow}>
              <Text style={styles.filterHeader}>{t.filters}</Text>
-             <TouchableOpacity onPress={() => { setGenre(null); setLength('all'); setKids(false); setHideSeen(true); commitYears('', ''); }}>
+             <TouchableOpacity onPress={() => { setGenre(null); setLength('all'); setKids(false); setHideSeen(true); setHideListed(true); commitYears('', ''); }}>
                <Text style={styles.clearText}>{t.clear}</Text>
              </TouchableOpacity>
            </View>
+          <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
 
            <Text style={styles.filterLabel}>{t.lengthLabel}</Text>
            <View style={styles.wrapRow}>
@@ -404,13 +412,16 @@ export default function SearchScreen() {
              <Text style={styles.filterLabel}>{t.hideSeen}</Text>
              <Switch value={hideSeen} onValueChange={setHideSeen} trackColor={{ true: theme.red, false: theme.surface2 }} thumbColor="#fff" />
            </View>
-
+           <View style={styles.kidsRow}>
+             <Text style={styles.filterLabel}>{t.hideListed}</Text>
+             <Switch value={hideListed} onValueChange={setHideListed} trackColor={{ true: theme.red, false: theme.surface2 }} thumbColor="#fff" />
+           </View>
+          </ScrollView>
            <TouchableOpacity style={styles.applyBtn} onPress={closeFilters}>
              <Text style={styles.applyText}>{t.apply}</Text>
            </TouchableOpacity>
-          </ScrollView>
-         </Pressable>
-       </Pressable>
+         </View>
+       </View>
      </Modal>
 
      <MovieDetails target={detailFor} lang={titleLang} onClose={() => setDetailFor(null)} />

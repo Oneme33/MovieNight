@@ -2,7 +2,7 @@
   "expo": {
     "name": "MovieNight",
     "slug": "filmavond",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.coenvermeer.filmavond",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#B7121C",
         "foregroundImage": "./assets/adaptive-icon.png"

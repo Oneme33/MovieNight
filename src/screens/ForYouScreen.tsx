@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View, Text, FlatList, ScrollView, TouchableOpacity, StyleSheet, Image,
-  RefreshControl, Modal, Pressable,
+  RefreshControl, Modal, Pressable, ActivityIndicator, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { hTap, hMedium } from '../haptics';
@@ -14,7 +15,9 @@ import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { MovieRow } from '../supabase';
 import { fetchMovies, addMovie } from '../db';
-import { recommendationsFor, loadExtrasBatched, IMG, SearchResult } from '../tmdb';
+import {
+  recommendationsFor, loadExtrasBatched, usNewOnDigital, usNewPage, getExtrasMany, IMG, SearchResult, MovieExtras,
+} from '../tmdb';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 import { SkeletonRows } from '../Loader';
 
@@ -24,16 +27,46 @@ const MAX_SEEDS = 12;
 const MAX_RESULTS = 50;
 const ROW_SIZE = 12;
 const DISMISSED_KEY = 'filmavond.dismissedRecs';
+const US_NEW_KEY = 'filmavond.usNew';
 
-function PosterCard({ item, isAdded, onPress, onAction }: {
-  item: Rec; isAdded: boolean; onPress: () => void; onAction: () => void;
+const withExtras = (x: Rec, ex: MovieExtras): Rec => ({
+  ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating,
+  runtime: ex.runtime, certAge: ex.certAge, nlRent: ex.nlRent, providersLoaded: true,
+});
+
+type Status = { text: string; color: string } | null;
+type RowDef = {
+  key: string; title: string; icon: keyof typeof Ionicons.glyphMap; hint?: string;
+  pred: (r: Rec) => boolean; sort: (a: Rec, b: Rec) => number;
+};
+
+const GRID_W = Math.floor((Dimensions.get('window').width - 32 - 20) / 3);
+
+// Score: how often a movie is recommended across seeds (+ position & popularity as tiebreaker).
+function scoreLists(lists: SearchResult[][], skip: (id: number) => boolean): Rec[] {
+  const scored = new Map<number, Rec>();
+  lists.forEach((list) => {
+    list.forEach((r, i) => {
+      if (skip(r.tmdb_id)) return;
+      const bonus = 1000 + (20 - Math.min(i, 20)) * 10 + (r.popularity ?? 0) / 100;
+      const cur = scored.get(r.tmdb_id);
+      if (cur) cur.score += bonus;
+      else scored.set(r.tmdb_id, { ...r, score: bonus });
+    });
+  });
+  return [...scored.values()].sort((a, b) => b.score - a.score);
+}
+
+function PosterCard({ item, isAdded, onPress, onAction, status, width = 112 }: {
+  item: Rec; isAdded: boolean; onPress: () => void; onAction: () => void; status?: Status; width?: number;
 }) {
   const poster = IMG(item.poster_path, 'w342');
+  const size = { width, height: Math.round(width * 1.48) };
   return (
-    <TouchableOpacity style={pc.wrap} onPress={onPress} onLongPress={onAction} delayLongPress={280} activeOpacity={0.85}>
-      <View style={pc.poster}>
+    <TouchableOpacity style={{ width }} onPress={onPress} onLongPress={onAction} delayLongPress={280} activeOpacity={0.85}>
+      <View style={[pc.poster, size]}>
         {poster ? (
-          <Image source={{ uri: poster }} style={pc.posterImg} />
+          <Image source={{ uri: poster }} style={size} />
         ) : (
           <View style={pc.posterEmpty}><Ionicons name="film-outline" size={28} color={theme.textFaint} /></View>
         )}
@@ -48,6 +81,7 @@ function PosterCard({ item, isAdded, onPress, onAction }: {
         </TouchableOpacity>
       </View>
       <Text style={pc.title} numberOfLines={2}>{item.title}</Text>
+      {status ? <Text style={[pc.status, { color: status.color }]} numberOfLines={1}>{status.text}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -72,6 +106,57 @@ export default function ForYouScreen() {
   const [added, setAdded] = useState<Set<number>>(new Set());
   const [detailFor, setDetailFor] = useState<DetailTarget>(null);
   const [actionFor, setActionFor] = useState<Rec | null>(null);
+  const [usNew, setUsNew] = useState<Rec[]>([]);
+  const usNewLang = useRef<string | null>(null);
+
+  // Full candidate pool behind the rows (the rows only show the top of it).
+  const poolRef = useRef<Rec[]>([]);
+  const excludeRef = useRef<Set<number>>(new Set());
+  const listIdsRef = useRef<Set<number>>(new Set());
+  const seedIdsRef = useRef<number[]>([]);
+  const recPageRef = useRef(1);
+
+  // "More" sheet: the whole row as a grid, with load-more.
+  const [sheetKey, setSheetKey] = useState<string | null>(null);
+  const [sheetItems, setSheetItems] = useState<Rec[]>([]);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetDone, setSheetDone] = useState(false);
+  const sheetCursor = useRef(0);
+  const sheetGen = useRef(0);
+  const insets = useSafeAreaInsets();
+
+  // "Just streaming in the US": independent of your ratings, refreshed once per language (or on pull).
+  const loadUsNew = async (listIds: Set<number>, force: boolean) => {
+    if (!force && usNewLang.current === titleLang) return;
+    const dismissed = await getDismissed();
+    try {
+      const all = await usNewOnDigital(titleLang);
+      const top: Rec[] = all
+        .filter((r) => !listIds.has(r.tmdb_id) && !dismissed.has(r.tmdb_id))
+        .map((r) => ({ ...r, score: 0 }));
+      usNewLang.current = titleLang;
+      setUsNew(top);
+      AsyncStorage.setItem(US_NEW_KEY, JSON.stringify(top.slice(0, ROW_SIZE))).catch(() => {});
+      loadExtrasBatched(top.slice(0, ROW_SIZE).map((r) => r.tmdb_id), titleLang, (batch) => {
+        setUsNew((prev) => prev.map((x) => (batch[x.tmdb_id] ? withExtras(x, batch[x.tmdb_id]) : x)));
+      });
+    } catch {
+      try {
+        const raw = await AsyncStorage.getItem(US_NEW_KEY);
+        if (raw) setUsNew((prev) => (prev.length ? prev : JSON.parse(raw)));
+      } catch {}
+    }
+  };
+
+  const usStatus = (r: Rec): Status => {
+    if (!r.providersLoaded) return null;
+    const mine = r.ours.find((o) => services.includes(o.key));
+    if (mine) return { text: t.usOnService(mine.key), color: theme.green };
+    if (r.nlRent?.length) {
+      return { text: t.usRentNL(r.nlRent.find((n) => n.startsWith('Path')) ?? r.nlRent[0]), color: theme.gold };
+    }
+    return { text: t.usNotNL, color: theme.textFaint };
+  };
 
   const build = useCallback(async (force = false) => {
     if (!session) return;
@@ -83,11 +168,16 @@ export default function ForYouScreen() {
       try {
         const raw = await AsyncStorage.getItem('filmavond.recs');
         if (raw) setRecs((prev) => (prev.length ? prev : JSON.parse(raw)));
+        const rawUs = await AsyncStorage.getItem(US_NEW_KEY);
+        if (rawUs) setUsNew((prev) => (prev.length ? prev : JSON.parse(rawUs)));
       } catch {}
       setLoading(false);
       return;
     }
-    setAdded(new Set(movies.map((m) => m.tmdb_id).filter(Boolean) as number[]));
+    const listIds = new Set(movies.map((m) => m.tmdb_id).filter(Boolean) as number[]);
+    setAdded(listIds);
+    listIdsRef.current = listIds;
+    loadUsNew(listIds, force);
 
     // Seeds: movies you rated 7+ first, then the current watchlist.
     const rated = movies.filter((m) => m.tmdb_id && m.seen && Object.values(m.ratings ?? {}).some((v) => v >= 7));
@@ -105,18 +195,12 @@ export default function ForYouScreen() {
     ]);
 
     const lists = await Promise.all(seeds.map((s) => recommendationsFor(s.tmdb_id!, titleLang)));
-    // Score: how often a movie is recommended across seeds (+ position & popularity as tiebreaker).
-    const scored = new Map<number, Rec>();
-    lists.forEach((list) => {
-      list.forEach((r, i) => {
-        if (exclude.has(r.tmdb_id)) return;
-        const bonus = 1000 + (20 - Math.min(i, 20)) * 10 + (r.popularity ?? 0) / 100;
-        const cur = scored.get(r.tmdb_id);
-        if (cur) cur.score += bonus;
-        else scored.set(r.tmdb_id, { ...r, score: bonus });
-      });
-    });
-    const top = [...scored.values()].sort((a, b) => b.score - a.score).slice(0, MAX_RESULTS);
+    const pool = scoreLists(lists, (id) => exclude.has(id));
+    poolRef.current = pool;
+    excludeRef.current = exclude;
+    seedIdsRef.current = seeds.map((s) => s.tmdb_id!);
+    recPageRef.current = 1;
+    const top = pool.slice(0, MAX_RESULTS);
     if (!top.length) {
       // TMDB unreachable: keep whatever we had (cache) instead of blanking the tab.
       try {
@@ -132,15 +216,7 @@ export default function ForYouScreen() {
 
     // Load runtime/age/services per movie (cached) so the theme rows can fill up.
     loadExtrasBatched(top.map((r) => r.tmdb_id), titleLang, (batch) => {
-      setRecs((prev) => prev.map((x) => {
-        const ex = batch[x.tmdb_id];
-        return ex
-          ? {
-              ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating,
-              runtime: ex.runtime, certAge: ex.certAge, providersLoaded: true,
-            }
-          : x;
-      }));
+      setRecs((prev) => prev.map((x) => (batch[x.tmdb_id] ? withExtras(x, batch[x.tmdb_id]) : x)));
     });
   }, [session, titleLang, seedSig, recs.length]);
 
@@ -148,20 +224,105 @@ export default function ForYouScreen() {
 
   const onRefresh = async () => { setRefreshing(true); await build(true); setRefreshing(false); };
 
-  // Theme rows, derived from the scored recommendations.
-  const rows = useMemo(() => {
+  // Theme rows: a filter + sort over the scored recommendations (the "More" sheet reuses them).
+  const rowDefs = useMemo<RowDef[]>(() => {
     const byScore = (a: Rec, b: Rec) => b.score - a.score;
-    const onMyService = (r: Rec) => r.ours.some((o) => services.includes(o.key));
+    const byRating = (a: Rec, b: Rec) => (b.rating ?? 0) - (a.rating ?? 0);
     const popMedian = [...recs].map((r) => r.popularity ?? 0).sort((a, b) => a - b)[Math.floor(recs.length / 2)] ?? 0;
     return [
-      { key: 'tonight', title: t.themeTonight, icon: 'sparkles' as const, data: [...recs].sort(byScore).slice(0, ROW_SIZE) },
-      { key: 'services', title: t.themeOnServices, icon: 'tv-outline' as const, data: recs.filter(onMyService).sort(byScore).slice(0, ROW_SIZE) },
-      { key: 'short', title: t.themeShort, icon: 'hourglass-outline' as const, data: recs.filter((r) => r.runtime != null && r.runtime <= 90).sort(byScore).slice(0, ROW_SIZE) },
-      { key: 'top', title: t.themeTop, icon: 'star-outline' as const, data: recs.filter((r) => r.rating != null).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, ROW_SIZE) },
-      { key: 'kids', title: t.themeKids, icon: 'happy-outline' as const, data: recs.filter((r) => r.certAge != null && r.certAge <= 9).sort(byScore).slice(0, ROW_SIZE) },
-      { key: 'gems', title: t.themeGems, icon: 'diamond-outline' as const, data: recs.filter((r) => (r.rating ?? 0) >= 7 && (r.popularity ?? 0) <= popMedian).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, ROW_SIZE) },
-    ].filter((row) => row.data.length >= 3);
+      { key: 'tonight', title: t.themeTonight, icon: 'sparkles', pred: () => true, sort: byScore },
+      { key: 'usNew', title: t.themeUsNew, icon: 'airplane-outline', hint: t.themeUsNewHint, pred: () => true, sort: () => 0 },
+      { key: 'services', title: t.themeOnServices, icon: 'tv-outline', pred: (r) => r.ours.some((o) => services.includes(o.key)), sort: byScore },
+      { key: 'short', title: t.themeShort, icon: 'hourglass-outline', pred: (r) => r.runtime != null && r.runtime <= 90, sort: byScore },
+      { key: 'top', title: t.themeTop, icon: 'star-outline', pred: (r) => r.rating != null, sort: byRating },
+      { key: 'kids', title: t.themeKids, icon: 'happy-outline', pred: (r) => r.certAge != null && r.certAge <= 9, sort: byScore },
+      { key: 'gems', title: t.themeGems, icon: 'diamond-outline', pred: (r) => (r.rating ?? 0) >= 7 && (r.popularity ?? 0) <= popMedian, sort: byRating },
+    ];
   }, [recs, services]);
+
+  const rows = useMemo(() => rowDefs
+    .map((d) => ({ ...d, data: d.key === 'usNew' ? usNew.slice(0, ROW_SIZE) : recs.filter(d.pred).sort(d.sort).slice(0, ROW_SIZE) }))
+    .filter((row) => row.data.length >= 3), [rowDefs, recs, usNew]);
+
+  const sheetDef = rowDefs.find((d) => d.key === sheetKey);
+
+  const enrichSheet = (items: Rec[]) => {
+    loadExtrasBatched(items.filter((x) => !x.providersLoaded).map((x) => x.tmdb_id), titleLang, (batch) => {
+      setSheetItems((prev) => prev.map((x) => (batch[x.tmdb_id] ? withExtras(x, batch[x.tmdb_id]) : x)));
+    });
+  };
+
+  const openSheet = (def: RowDef) => {
+    hTap();
+    sheetGen.current++;
+    setSheetKey(def.key);
+    setSheetDone(false);
+    setSheetBusy(false);
+    if (def.key === 'usNew') {
+      setSheetItems(usNew);
+      sheetCursor.current = 3; // pages 1–2 are already in usNew
+      enrichSheet(usNew);
+    } else {
+      setSheetItems(recs.filter(def.pred).sort(def.sort));
+      sheetCursor.current = Math.min(poolRef.current.length, MAX_RESULTS);
+    }
+  };
+
+  // Next page of recommendations for every seed, merged into the pool.
+  const growPool = async (): Promise<boolean> => {
+    if (recPageRef.current >= 10 || !seedIdsRef.current.length) return false;
+    const page = ++recPageRef.current;
+    const lists = await Promise.all(seedIdsRef.current.map((id) => recommendationsFor(id, titleLang, page)));
+    const known = new Set(poolRef.current.map((r) => r.tmdb_id));
+    const extra = scoreLists(lists, (id) => known.has(id) || excludeRef.current.has(id));
+    poolRef.current = [...poolRef.current, ...extra];
+    return extra.length > 0;
+  };
+
+  const loadMoreSheet = async () => {
+    const def = sheetDef;
+    if (!def || sheetBusy || sheetDone) return;
+    const gen = sheetGen.current;
+    setSheetBusy(true);
+    const dismissed = await getDismissed();
+    const have = new Set(sheetItems.map((x) => x.tmdb_id));
+    const fresh: Rec[] = [];
+    let done = false;
+    try {
+      if (def.key === 'usNew') {
+        for (let i = 0; i < 3 && fresh.length < 12 && !done; i++) {
+          const page = sheetCursor.current++;
+          const d = await usNewPage(titleLang, page);
+          if (page >= d.totalPages || !d.results.length) done = true;
+          const cand = d.results.filter((r) =>
+            !have.has(r.tmdb_id) && !listIdsRef.current.has(r.tmdb_id) && !dismissed.has(r.tmdb_id));
+          const ex = await getExtrasMany(cand.map((r) => r.tmdb_id), titleLang);
+          cand.forEach((r) => {
+            have.add(r.tmdb_id);
+            const rec: Rec = { ...r, score: 0 };
+            fresh.push(ex[r.tmdb_id] ? withExtras(rec, ex[r.tmdb_id]) : rec);
+          });
+        }
+      } else {
+        for (let i = 0; i < 4 && fresh.length < 12; i++) {
+          if (sheetCursor.current >= poolRef.current.length && !(await growPool())) { done = true; break; }
+          const chunk = poolRef.current.slice(sheetCursor.current, sheetCursor.current + 30);
+          sheetCursor.current += chunk.length;
+          const cand = chunk.filter((r) => !have.has(r.tmdb_id) && !dismissed.has(r.tmdb_id));
+          const ex = await getExtrasMany(cand.map((r) => r.tmdb_id), titleLang);
+          cand
+            .map((r) => (ex[r.tmdb_id] ? withExtras(r, ex[r.tmdb_id]) : r))
+            .filter(def.pred)
+            .sort(def.sort)
+            .forEach((r) => { have.add(r.tmdb_id); fresh.push(r); });
+        }
+      }
+    } catch { done = true; }
+    setSheetBusy(false);
+    if (gen !== sheetGen.current) return;
+    setSheetItems((prev) => [...prev, ...fresh]);
+    if (done) setSheetDone(true);
+  };
 
   const onAdd = async (r: Rec) => {
     if (!session) return;
@@ -179,6 +340,8 @@ export default function ForYouScreen() {
   const dismiss = async (r: Rec) => {
     hMedium();
     setRecs((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
+    setUsNew((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
+    setSheetItems((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
     const d = await getDismissed();
     d.add(r.tmdb_id);
     AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify([...d])).catch(() => {});
@@ -189,6 +352,8 @@ export default function ForYouScreen() {
     if (!session) return;
     hTap();
     setRecs((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
+    setUsNew((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
+    setSheetItems((prev) => prev.filter((x) => x.tmdb_id !== r.tmdb_id));
     setAdded((prev) => new Set(prev).add(r.tmdb_id));
     try {
       await addMovie(session.listId, session.memberName, {
@@ -225,6 +390,7 @@ export default function ForYouScreen() {
                 <Ionicons name={row.icon} size={16} color={theme.red} />
                 <Text style={styles.rowTitle}>{row.title}</Text>
               </View>
+              {row.hint ? <Text style={styles.rowHint}>{row.hint}</Text> : null}
               <FlatList
                 horizontal
                 data={row.data}
@@ -237,13 +403,54 @@ export default function ForYouScreen() {
                     isAdded={added.has(item.tmdb_id)}
                     onPress={() => setDetailFor(item)}
                     onAction={() => openActions(item)}
+                    status={row.key === 'usNew' ? usStatus(item) : undefined}
                   />
                 )}
+                ListFooterComponent={
+                  <TouchableOpacity style={styles.moreTile} onPress={() => openSheet(row)} activeOpacity={0.85}>
+                    <View style={styles.moreCircle}><Ionicons name="arrow-forward" size={22} color={theme.red} /></View>
+                    <Text style={styles.moreTileText}>{t.more}</Text>
+                  </TouchableOpacity>
+                }
               />
             </Animated.View>
           ))}
         </ScrollView>
       )}
+
+      <Modal visible={!!sheetDef} animationType="slide" statusBarTranslucent onRequestClose={() => setSheetKey(null)}>
+        <View style={[styles.sheet, { paddingTop: insets.top }]}>
+          <View style={styles.sheetHeader}>
+            <TouchableOpacity onPress={() => setSheetKey(null)} style={styles.sheetBack}>
+              <Ionicons name="chevron-back" size={24} color={theme.text} />
+            </TouchableOpacity>
+            {sheetDef ? <Ionicons name={sheetDef.icon} size={17} color={theme.red} /> : null}
+            <Text style={styles.sheetTitle} numberOfLines={1}>{sheetDef?.title}</Text>
+          </View>
+          <FlatList
+            data={sheetItems}
+            keyExtractor={(r) => `sheet-${r.tmdb_id}`}
+            numColumns={3}
+            columnWrapperStyle={{ gap: 10 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 24 + insets.bottom, gap: 16 }}
+            renderItem={({ item }) => (
+              <PosterCard
+                item={item}
+                width={GRID_W}
+                isAdded={added.has(item.tmdb_id)}
+                onPress={() => setDetailFor(item)}
+                onAction={() => openActions(item)}
+                status={sheetKey === 'usNew' ? usStatus(item) : undefined}
+              />
+            )}
+            ListFooterComponent={sheetDone ? null : (
+              <TouchableOpacity style={styles.loadMoreBtn} onPress={loadMoreSheet} disabled={sheetBusy}>
+                {sheetBusy ? <ActivityIndicator color={theme.text} /> : <Text style={styles.loadMoreText}>{t.loadMore}</Text>}
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
 
       <Modal visible={!!actionFor} transparent animationType="fade" onRequestClose={() => setActionFor(null)}>
         <Pressable style={styles.backdrop} onPress={() => setActionFor(null)}>
@@ -285,6 +492,25 @@ const styles = StyleSheet.create({
   row: { marginBottom: 24 },
   rowHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, marginBottom: 10 },
   rowTitle: { color: theme.text, fontSize: 16, fontWeight: '600' },
+  moreTile: { width: 84, height: 166, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  moreCircle: {
+    width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, borderColor: theme.red,
+    backgroundColor: 'rgba(225,29,42,0.10)', alignItems: 'center', justifyContent: 'center',
+  },
+  moreTileText: { color: theme.text, fontSize: 13, fontWeight: '600' },
+  sheet: { flex: 1, backgroundColor: theme.bg },
+  sheetHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, height: 56,
+    borderBottomWidth: 1, borderBottomColor: theme.border, backgroundColor: theme.surfaceOpaque,
+  },
+  sheetBack: { padding: 8 },
+  sheetTitle: { flex: 1, color: theme.text, fontSize: 17, fontWeight: '600' },
+  loadMoreBtn: {
+    marginTop: 8, alignSelf: 'center', paddingHorizontal: 22, paddingVertical: 12, minWidth: 140, alignItems: 'center',
+    borderRadius: radius.md, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border,
+  },
+  loadMoreText: { color: theme.text, fontSize: 14, fontWeight: '500' },
+  rowHint: { color: theme.textFaint, fontSize: 12, paddingHorizontal: 16, marginTop: -6, marginBottom: 10 },
   rowContent: { paddingHorizontal: 16, gap: 12 },
   empty: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32, gap: 12 },
   emptyText: { color: theme.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 21 },
@@ -298,12 +524,10 @@ const styles = StyleSheet.create({
 });
 
 const pc = StyleSheet.create({
-  wrap: { width: 112 },
   poster: {
     width: 112, height: 166, borderRadius: 10, backgroundColor: theme.surface2,
     overflow: 'hidden', borderWidth: 1, borderColor: theme.border,
   },
-  posterImg: { width: 112, height: 166 },
   posterEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   badge: {
     position: 'absolute', top: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3,
@@ -317,4 +541,5 @@ const pc = StyleSheet.create({
   },
   actionDone: { borderColor: theme.green },
   title: { color: theme.textMuted, fontSize: 12, lineHeight: 16, marginTop: 6 },
+  status: { fontSize: 11, fontWeight: '600', marginTop: 3 },
 });
