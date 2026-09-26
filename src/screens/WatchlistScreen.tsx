@@ -22,7 +22,8 @@ import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { supabase, MovieRow } from '../supabase';
 import { fetchMovies, deleteMovie, persistOrder, markSeen, unmarkSeen } from '../db';
-import { IMG, LOGO, loadExtrasBatched, MovieExtras, GENRE_OPTIONS, Length } from '../tmdb';
+import { IMG, LOGO, loadExtrasBatched, MovieExtras, Length, LENGTH_OPTIONS, matchesLength } from '../tmdb';
+import { GenreDropdown } from '../GenreDropdown';
 import { SkeletonList } from '../Loader';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 
@@ -36,12 +37,6 @@ const SORTS: { key: SortMode; label: string; icon: keyof typeof Ionicons.glyphMa
   { key: 'handmatig', label: t.sortManual, icon: 'reorder-three-outline' },
 ];
 
-const LENGTHS: { key: Length; label: string }[] = [
-  { key: 'all', label: t.lenAll },
-  { key: 'short', label: t.lenShort },
-  { key: 'mid', label: t.lenMid },
-  { key: 'long', label: t.lenLong },
-];
 
 type SeenSort = 'datum' | 'titel' | 'cijfer';
 const SEEN_SORTS: { key: SeenSort; label: string }[] = [
@@ -406,10 +401,7 @@ export default function WatchlistScreen() {
         const ex = m.tmdb_id ? extras[m.tmdb_id] : undefined;
         if (fLength !== 'all') {
           const rt = ex?.runtime;
-          if (rt == null) return false;
-          if (fLength === 'short' && rt >= 60) return false;
-          if (fLength === 'mid' && (rt < 60 || rt > 90)) return false;
-          if (fLength === 'long' && rt < 90) return false;
+          if (rt == null || !matchesLength(rt, fLength)) return false;
         }
         if (fGenre && !ex?.genreIds?.includes(fGenre)) return false;
         if (fKids && !(ex?.certAge != null && ex.certAge <= 9)) return false;
@@ -846,7 +838,7 @@ export default function WatchlistScreen() {
 
             <Text style={styles.filterLabel}>{t.lengthLabel}</Text>
             <View style={styles.wrapRow}>
-              {LENGTHS.map((l) => (
+              {LENGTH_OPTIONS.map((l) => (
                 <TouchableOpacity key={l.key} style={[styles.fChip, fLength === l.key && styles.fChipOn]} onPress={() => setFLength(l.key)}>
                   <Text style={[styles.fChipText, fLength === l.key && styles.fChipTextOn]}>{l.label}</Text>
                 </TouchableOpacity>
@@ -859,16 +851,7 @@ export default function WatchlistScreen() {
             </View>
 
             <Text style={styles.filterLabel}>{t.genreLabel}</Text>
-            <View style={styles.wrapRow}>
-              {GENRE_OPTIONS.map((g) => {
-                const on = fGenre === g.id;
-                return (
-                  <TouchableOpacity key={g.id} style={[styles.fChip, on && styles.fChipOn]} onPress={() => setFGenre(on ? null : g.id)}>
-                    <Text style={[styles.fChipText, on && styles.fChipTextOn]}>{g.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <GenreDropdown value={fGenre} onChange={setFGenre} />
 
             <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterOpen(false)}>
               <Text style={styles.applyText}>{t.apply}</Text>

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TMDB_TOKEN } from './config';
-import { uiLang } from './i18n';
+import { uiLang, t } from './i18n';
 import type { TitleLang } from './ListContext';
 
 const BASE = 'https://api.themoviedb.org/3';
@@ -85,6 +85,7 @@ export type SearchResult = {
   ours: Provider[];
   hasFlatrate?: boolean;
   providersLoaded: boolean;
+  extrasLoaded?: boolean; // runtime/age/services looked up (or the lookup failed)
 };
 
 // Unreleased movies are hidden everywhere — you can't watch them yet.
@@ -126,7 +127,21 @@ const SORT_PARAM: Record<DiscoverSort, string> = {
 };
 
 export type DiscoverPage = { results: SearchResult[]; totalPages: number };
-export type Length = 'all' | 'short' | 'mid' | 'long';
+export type Length = 'all' | 'xshort' | 'short' | 'mid' | 'long';
+export const LENGTH_OPTIONS: { key: Length; label: string }[] = [
+  { key: 'all', label: t.lenAll },
+  { key: 'xshort', label: t.lenXShort },
+  { key: 'short', label: t.lenShort },
+  { key: 'mid', label: t.lenMid },
+  { key: 'long', label: t.lenLong },
+];
+export function matchesLength(rt: number, len: Length): boolean {
+  if (len === 'xshort') return rt < 30;
+  if (len === 'short') return rt < 60;
+  if (len === 'mid') return rt >= 60 && rt <= 90;
+  if (len === 'long') return rt >= 90;
+  return true;
+}
 export type DiscoverOpts = {
   providerId?: number | null;
   streaming?: boolean; // true = on one of the selected services; false = everything
@@ -137,11 +152,14 @@ export type DiscoverOpts = {
   genre?: number | null;
   length?: Length;
   kids?: boolean;
+  yearFrom?: number | null;
+  yearTo?: number | null;
 };
 
 const discoverCache = new Map<string, DiscoverPage>();
 
 function runtimeParams(len?: Length): string {
+  if (len === 'xshort') return '&with_runtime.gte=1&with_runtime.lte=29';
   if (len === 'short') return '&with_runtime.lte=59';
   if (len === 'mid') return '&with_runtime.gte=60&with_runtime.lte=90';
   if (len === 'long') return '&with_runtime.gte=90';
@@ -150,22 +168,24 @@ function runtimeParams(len?: Length): string {
 
 // Browse movies: everything, any NL subscription service, or one service — with filters.
 export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
-  const { providerId = null, streaming = false, streamingIds = [], sort, lang = 'en', page = 1, genre = null, length = 'all', kids = false } = o;
-  const cacheKey = `${providerId}:${streaming}:${streamingIds.join('.')}:${sort}:${lang}:${page}:${genre}:${length}:${kids}`;
+  const { providerId = null, streaming = false, streamingIds = [], sort, lang = 'en', page = 1, genre = null, length = 'all', kids = false, yearFrom = null, yearTo = null } = o;
+  const cacheKey = `${providerId}:${streaming}:${streamingIds.join('.')}:${sort}:${lang}:${page}:${genre}:${length}:${kids}:${yearFrom}:${yearTo}`;
   const hit = discoverCache.get(cacheKey);
   if (hit) return { results: hit.results.map((r: SearchResult) => ({ ...r })), totalPages: hit.totalPages };
   const prov = providerId ? OUR_PROVIDERS.find((p) => p.id === providerId) : undefined;
   const ours: Provider[] = prov ? [{ key: prov.key, name: prov.key, logo_path: prov.logo }] : [];
   let url = `${BASE}/discover/movie?language=${apiLang(lang)}&watch_region=NL`
-    + `&include_adult=false&primary_release_date.lte=${today()}`
+    + `&include_adult=false&primary_release_date.lte=${yearTo && `${yearTo}-12-31` < today() ? `${yearTo}-12-31` : today()}`
     + `&sort_by=${SORT_PARAM[sort]}&page=${page}`;
   if (providerId || streaming) url += '&with_watch_monetization_types=flatrate';
   if (providerId) url += `&with_watch_providers=${providerId}`;
   else if (streaming && streamingIds.length) url += `&with_watch_providers=${streamingIds.join('|')}`;
+  if (yearFrom) url += `&primary_release_date.gte=${yearFrom}-01-01`;
   if (genre) url += `&with_genres=${genre}`;
   url += runtimeParams(length);
   if (kids) url += '&certification_country=NL&certification.lte=9';
   if (sort === 'rating') url += '&vote_count.gte=100';
+  else if (yearFrom || yearTo) url += '&vote_count.gte=50'; // keeps obscure titles from topping year ranges
   const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`TMDB discover failed (${res.status})`);
   const data = await res.json();

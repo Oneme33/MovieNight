@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Keyboard, ScrollView, Modal, Pressable, Switch,
@@ -12,8 +13,9 @@ import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import {
   searchMovies, discover, loadExtrasBatched, IMG, LOGO,
-  OUR_PROVIDERS, GENRE_OPTIONS, SearchResult, DiscoverSort, Length,
+  OUR_PROVIDERS, SearchResult, DiscoverSort, Length, LENGTH_OPTIONS, matchesLength,
 } from '../tmdb';
+import { GenreDropdown } from '../GenreDropdown';
 import { addMovie, fetchMovies } from '../db';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 import { SkeletonList } from '../Loader';
@@ -26,12 +28,19 @@ const SORTS: { key: DiscoverSort; label: string; icon: keyof typeof Ionicons.gly
   { key: 'length', label: t.sortLength, icon: 'hourglass-outline' },
 ];
 
-const LENGTHS: { key: Length; label: string }[] = [
-  { key: 'all', label: t.lenAll },
-  { key: 'short', label: t.lenShort },
-  { key: 'mid', label: t.lenMid },
-  { key: 'long', label: t.lenLong },
+const THIS_YEAR = new Date().getFullYear();
+const YEAR_PRESETS: { label: string; from: number | null; to: number | null }[] = [
+  { label: t.yearRecent, from: THIS_YEAR - 2, to: null },
+  { label: '2010–19', from: 2010, to: 2019 },
+  { label: '2000–09', from: 2000, to: 2009 },
+  { label: '1990–99', from: 1990, to: 1999 },
+  { label: '1980–89', from: 1980, to: 1989 },
+  { label: t.yearOld, from: null, to: 1979 },
 ];
+const parseYear = (v: string) => {
+  const n = Number(v);
+  return /^\d{4}$/.test(v) && n >= 1900 && n <= THIS_YEAR ? n : null;
+};
 
 const provKey = (id: number | null) => (id ? OUR_PROVIDERS.find((p) => p.id === id)?.key : undefined);
 
@@ -53,15 +62,23 @@ export default function SearchScreen() {
   const [genre, setGenre] = useState<number | null>(null);
   const [length, setLength] = useState<Length>('all');
   const [kids, setKids] = useState(false);
+  const [hideSeen, setHideSeen] = useState(true);
+  const [seenIds, setSeenIds] = useState<Set<number>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
+  const [yearFrom, setYearFrom] = useState<number | null>(null);
+  const [yearTo, setYearTo] = useState<number | null>(null);
+  const [fromDraft, setFromDraft] = useState('');
+  const [toDraft, setToDraft] = useState('');
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  // Refresh on focus, so movies marked as seen elsewhere are hidden here too.
+  useFocusEffect(useCallback(() => {
     if (!session) return;
     fetchMovies(session.listId).then((ms) => {
       setAdded(new Set(ms.map((m) => m.tmdb_id).filter(Boolean) as number[]));
+      setSeenIds(new Set(ms.filter((m) => m.seen && m.tmdb_id).map((m) => m.tmdb_id as number)));
     }).catch(() => {});
-  }, [session]);
+  }, [session]));
 
   // If the selected service was removed in Settings, fall back to "All".
   useEffect(() => {
@@ -73,11 +90,12 @@ export default function SearchScreen() {
       setResults((prev) => prev.map((x) => {
         const ex = batch[x.tmdb_id];
         return ex
-          ? { ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true }
+          ? { ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true, extrasLoaded: true }
           : x;
       }));
-    });
+    }, (id) => setResults((prev) => prev.map((x) => (x.tmdb_id === id ? { ...x, extrasLoaded: true } : x))));
   };
+  const browseGen = useRef(0);
 
   const runSearch = useCallback(async (q: string) => {
     if (!q.trim()) return;
@@ -94,9 +112,10 @@ export default function SearchScreen() {
   useEffect(() => {
     if (query.trim()) return;
     let cancelled = false;
+    browseGen.current++;
     setLoading(true);
     setPage(1);
-    discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: 1, genre, length, kids })
+    discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: 1, genre, length, kids, yearFrom, yearTo })
       .then((d) => {
         if (cancelled) return;
         setResults(d.results);
@@ -106,14 +125,26 @@ export default function SearchScreen() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [service, streamingOnly, sort, titleLang, genre, length, kids, query, services.join(',')]);
+  }, [service, streamingOnly, sort, titleLang, genre, length, kids, yearFrom, yearTo, query, services.join(',')]);
+
+  // Years are typed as drafts and applied when the field or the filter sheet is left.
+  const commitYears = (fromS = fromDraft, toS = toDraft) => {
+    let a = parseYear(fromS);
+    let b = parseYear(toS);
+    if (a && b && a > b) [a, b] = [b, a];
+    setYearFrom(a); setYearTo(b);
+    setFromDraft(a ? String(a) : ''); setToDraft(b ? String(b) : '');
+  };
+  const closeFilters = () => { commitYears(); setFilterOpen(false); };
 
   const loadMore = async () => {
     if (query.trim() || loadingMore || page >= totalPages) return;
     setLoadingMore(true);
+    const gen = browseGen.current;
     try {
       const next = page + 1;
-      const d = await discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: next, genre, length, kids });
+      const d = await discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: next, genre, length, kids, yearFrom, yearTo });
+      if (gen !== browseGen.current) return;
       setResults((prev) => {
         const seenIds = new Set(prev.map((r) => r.tmdb_id));
         const fresh = d.results.filter((r) => !seenIds.has(r.tmdb_id));
@@ -148,14 +179,10 @@ export default function SearchScreen() {
   // Safety net: TMDB's server-side runtime filter is unreliable, so once the real
   // runtime is loaded we drop movies that don't match the length filter.
   if (!query.trim() && length !== 'all') {
-    visible = visible.filter((r) => {
-      const rt = r.runtime;
-      if (rt == null) return true; // still loading
-      if (length === 'short') return rt < 60;
-      if (length === 'mid') return rt >= 60 && rt <= 90;
-      return rt >= 90;
-    });
+    // Hidden until the real runtime is known, so wrong matches don't flash in and out.
+    visible = visible.filter((r) => r.runtime != null && matchesLength(r.runtime, length));
   }
+  if (!query.trim() && hideSeen && seenIds.size) visible = visible.filter((r) => !seenIds.has(r.tmdb_id));
   if (query.trim()) {
     const key = provKey(service);
     if (key) visible = visible.filter((r) => !r.providersLoaded || r.ours.some((o) => o.key === key));
@@ -172,7 +199,16 @@ export default function SearchScreen() {
     visible = [...visible].sort((a, b) => (a.runtime ?? 9999) - (b.runtime ?? 9999));
   }
 
-  const filterCount = (genre ? 1 : 0) + (length !== 'all' ? 1 : 0) + (kids ? 1 : 0);
+  const filterCount = (genre ? 1 : 0) + (length !== 'all' ? 1 : 0) + (kids ? 1 : 0) + (yearFrom || yearTo ? 1 : 0);
+
+  // With a length filter a page can thin out a lot; top it up automatically (a few pages max).
+  const browsing = !query.trim();
+  const extrasPending = browsing && length !== 'all' && results.some((r) => !r.extrasLoaded);
+  useEffect(() => {
+    if (!browsing || length === 'all' || loading || loadingMore || extrasPending) return;
+    if (visible.length >= 10 || page >= Math.min(totalPages, 4)) return;
+    loadMore();
+  }, [browsing, length, loading, loadingMore, extrasPending, visible.length, page, totalPages]);
 
   const renderItem = ({ item }: { item: SearchResult }) => {
     const poster = IMG(item.poster_path, 'w200');
@@ -286,7 +322,9 @@ export default function SearchScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24 }}
           ListFooterComponent={footer}
-          ListEmptyComponent={<Text style={styles.faintCenter}>{t.noResults}</Text>}
+          ListEmptyComponent={extrasPending || loadingMore
+            ? <View style={{ marginHorizontal: -16, marginTop: -8 }}><SkeletonList count={5} noHeader /></View>
+            : <Text style={styles.faintCenter}>{t.noResults}</Text>}
         />
       )}
      </View>
@@ -306,23 +344,52 @@ export default function SearchScreen() {
        </Pressable>
      </Modal>
 
-     <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
-       <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
+     <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={closeFilters}>
+       <Pressable style={styles.backdrop} onPress={closeFilters}>
          <Pressable style={styles.filterSheet}>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
            <View style={styles.filterHeaderRow}>
              <Text style={styles.filterHeader}>{t.filters}</Text>
-             <TouchableOpacity onPress={() => { setGenre(null); setLength('all'); setKids(false); }}>
+             <TouchableOpacity onPress={() => { setGenre(null); setLength('all'); setKids(false); setHideSeen(true); commitYears('', ''); }}>
                <Text style={styles.clearText}>{t.clear}</Text>
              </TouchableOpacity>
            </View>
 
            <Text style={styles.filterLabel}>{t.lengthLabel}</Text>
            <View style={styles.wrapRow}>
-             {LENGTHS.map((l) => (
+             {LENGTH_OPTIONS.map((l) => (
                <TouchableOpacity key={l.key} style={[styles.fChip, length === l.key && styles.fChipOn]} onPress={() => setLength(l.key)}>
                  <Text style={[styles.fChipText, length === l.key && styles.fChipTextOn]}>{l.label}</Text>
                </TouchableOpacity>
              ))}
+           </View>
+
+           <Text style={styles.filterLabel}>{t.yearLabel}</Text>
+           <View style={styles.yearRow}>
+             <TextInput
+               style={styles.yearInput} value={fromDraft} onChangeText={setFromDraft}
+               onEndEditing={() => commitYears()} keyboardType="number-pad" maxLength={4}
+               placeholder={t.yearFrom} placeholderTextColor={theme.textFaint}
+             />
+             <Text style={styles.yearDash}>–</Text>
+             <TextInput
+               style={styles.yearInput} value={toDraft} onChangeText={setToDraft}
+               onEndEditing={() => commitYears()} keyboardType="number-pad" maxLength={4}
+               placeholder={t.yearTo} placeholderTextColor={theme.textFaint}
+             />
+           </View>
+           <View style={[styles.wrapRow, { marginTop: 8 }]}>
+             {YEAR_PRESETS.map((p) => {
+               const on = fromDraft === (p.from ? String(p.from) : '') && toDraft === (p.to ? String(p.to) : '');
+               return (
+                 <TouchableOpacity
+                   key={p.label} style={[styles.fChip, on && styles.fChipOn]}
+                   onPress={() => (on ? commitYears('', '') : commitYears(p.from ? String(p.from) : '', p.to ? String(p.to) : ''))}
+                 >
+                   <Text style={[styles.fChipText, on && styles.fChipTextOn]}>{p.label}</Text>
+                 </TouchableOpacity>
+               );
+             })}
            </View>
 
            <View style={styles.kidsRow}>
@@ -331,20 +398,17 @@ export default function SearchScreen() {
            </View>
 
            <Text style={styles.filterLabel}>{t.genreLabel}</Text>
-           <View style={styles.wrapRow}>
-             {GENRE_OPTIONS.map((g) => {
-               const on = genre === g.id;
-               return (
-                 <TouchableOpacity key={g.id} style={[styles.fChip, on && styles.fChipOn]} onPress={() => setGenre(on ? null : g.id)}>
-                   <Text style={[styles.fChipText, on && styles.fChipTextOn]}>{g.name}</Text>
-                 </TouchableOpacity>
-               );
-             })}
+           <GenreDropdown value={genre} onChange={setGenre} />
+
+           <View style={styles.kidsRow}>
+             <Text style={styles.filterLabel}>{t.hideSeen}</Text>
+             <Switch value={hideSeen} onValueChange={setHideSeen} trackColor={{ true: theme.red, false: theme.surface2 }} thumbColor="#fff" />
            </View>
 
-           <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterOpen(false)}>
+           <TouchableOpacity style={styles.applyBtn} onPress={closeFilters}>
              <Text style={styles.applyText}>{t.apply}</Text>
            </TouchableOpacity>
+          </ScrollView>
          </Pressable>
        </Pressable>
      </Modal>
@@ -407,7 +471,7 @@ const styles = StyleSheet.create({
   menuTitle: { color: theme.textMuted, fontSize: 12, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 14, borderRadius: 10 },
   menuItemText: { color: theme.text, fontSize: 15 },
-  filterSheet: { backgroundColor: theme.surfaceOpaque, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: theme.border },
+  filterSheet: { maxHeight: '88%', backgroundColor: theme.surfaceOpaque, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: theme.border },
   filterHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   filterHeader: { color: theme.text, fontSize: 17, fontWeight: '600' },
   clearText: { color: theme.red, fontSize: 14 },
@@ -417,6 +481,12 @@ const styles = StyleSheet.create({
   fChipOn: { backgroundColor: theme.red, borderColor: theme.red },
   fChipText: { color: theme.textMuted, fontSize: 13 },
   fChipTextOn: { color: '#fff', fontWeight: '600' },
+  yearRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  yearInput: {
+    flex: 1, height: 42, borderRadius: radius.md, backgroundColor: theme.surface2, borderWidth: 1,
+    borderColor: theme.border, color: theme.text, fontSize: 15, textAlign: 'center',
+  },
+  yearDash: { color: theme.textMuted, fontSize: 16 },
   kidsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   applyBtn: { marginTop: 18, backgroundColor: theme.red, borderRadius: radius.md, height: 48, alignItems: 'center', justifyContent: 'center' },
   applyText: { color: '#fff', fontSize: 15, fontWeight: '600' },
