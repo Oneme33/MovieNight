@@ -25,6 +25,7 @@ import { fetchMovies, deleteMovie, persistOrder, markSeen, unmarkSeen } from '..
 import { IMG, LOGO, loadExtrasBatched, MovieExtras, Length, LENGTH_OPTIONS, matchesLength } from '../tmdb';
 import { GenreDropdown } from '../GenreDropdown';
 import { SkeletonList } from '../Loader';
+import { computeTasteMatch, TasteMatchCard, TasteMatchModal } from '../TasteMatch';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 
 type SortMode = 'nieuw' | 'waardering' | 'titel' | 'streaming' | 'lengte' | 'handmatig';
@@ -276,6 +277,7 @@ export default function WatchlistScreen() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [gridActionFor, setGridActionFor] = useState<MovieRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [tasteOpen, setTasteOpen] = useState(false);
   const [newsMsg, setNewsMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const newsChecked = useRef(false);
@@ -432,6 +434,11 @@ export default function WatchlistScreen() {
     return arr;
   }, [movies, seenSort, extras, displayTitle]);
 
+  const taste = useMemo(
+    () => computeTasteMatch(movies, session?.memberName, extras),
+    [movies, session?.memberName, extras]
+  );
+
   const patch = (id: string, fields: Partial<MovieRow>) =>
     setMovies((prev) => prev.map((m) => (m.id === id ? { ...m, ...fields } : m)));
 
@@ -572,9 +579,12 @@ export default function WatchlistScreen() {
     </View>
   );
   const seenHeader = (
-    <View style={styles.headerRow}>
-      <View style={{ flex: 1 }}>{sortButton(SEEN_SORTS.find((s) => s.key === seenSort)!.label, () => setSeenMenuOpen(true))}</View>
-      {viewToggleBtn}
+    <View>
+      <TasteMatchCard match={taste} onPress={() => { hTap(); setTasteOpen(true); }} />
+      <View style={styles.headerRow}>
+        <View style={{ flex: 1 }}>{sortButton(SEEN_SORTS.find((s) => s.key === seenSort)!.label, () => setSeenMenuOpen(true))}</View>
+        {viewToggleBtn}
+      </View>
     </View>
   );
 
@@ -895,6 +905,10 @@ export default function WatchlistScreen() {
         </Pressable>
       </Modal>
 
+      <TasteMatchModal
+        match={taste} me={session?.memberName ?? ''} visible={tasteOpen}
+        onClose={() => setTasteOpen(false)} titleOf={displayTitle}
+      />
       <MovieDetails target={detailFor} lang={titleLang} onClose={() => setDetailFor(null)} />
     </Background>
   );

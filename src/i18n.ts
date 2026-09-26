@@ -133,6 +133,17 @@ const nl = {
   partnerRated: (name: string, title: string, score: number) => `${name} gaf "${title}" een ${score}`,
   catchUp: (name: string, n: number) =>
     n === 1 ? `${name} heeft 1 nieuwe film toegevoegd` : `${name} heeft ${n} nieuwe films toegevoegd`,
+  tasteTitle: 'Smaakmatch',
+  tasteWith: (name: string) => `jij & ${name}`,
+  tasteLocked: (n: number) => n === 1 ? 'Beoordeel nog 1 film samen om jullie match te zien' : `Beoordeel nog ${n} films samen om jullie match te zien`,
+  tasteBasis: (n: number) => `Op basis van ${n} films die jullie allebei beoordeelden`,
+  tasteTier: (pct: number): string => pct >= 90 ? 'Filmzielsverwanten' : pct >= 78 ? 'Echte filmmaatjes' : pct >= 65 ? 'Meestal op één lijn' : pct >= 50 ? 'Smaken verschillen soms' : 'Tegenpolen trekken elkaar aan',
+  tasteStricter: (name: string, a: string, b: string) => `${name} is de strengste criticus (gem. ${a} tegen ${b})`,
+  tasteEqual: 'Jullie geven gemiddeld precies even hoge cijfers',
+  tasteFight: 'Grootste discussie',
+  tasteLove: 'Allebei fan',
+  tasteGenre: (g: string, pct: number) => `Het meest eens bij ${g} (${pct}%)`,
+  tasteNoPartner: 'Zodra jullie allebei films beoordelen, zie je hier jullie smaakmatch',
 };
 
 const en: typeof nl = {
@@ -260,6 +271,17 @@ const en: typeof nl = {
   partnerRated: (name: string, title: string, score: number) => `${name} rated "${title}" a ${score}`,
   catchUp: (name: string, n: number) =>
     n === 1 ? `${name} added 1 new movie` : `${name} added ${n} new movies`,
+  tasteTitle: 'Taste match',
+  tasteWith: (name: string) => `you & ${name}`,
+  tasteLocked: (n: number) => n === 1 ? 'Rate 1 more movie together to see your match' : `Rate ${n} more movies together to see your match`,
+  tasteBasis: (n: number) => `Based on ${n} movies you both rated`,
+  tasteTier: (pct: number) => pct >= 90 ? 'Movie soulmates' : pct >= 78 ? 'True movie buddies' : pct >= 65 ? 'Mostly on the same page' : pct >= 50 ? 'Tastes differ now and then' : 'Opposites attract',
+  tasteStricter: (name: string, a: string, b: string) => `${name} is the tougher critic (avg ${a} vs ${b})`,
+  tasteEqual: 'You rate exactly as generously on average',
+  tasteFight: 'Biggest debate',
+  tasteLove: 'Both loved it',
+  tasteGenre: (g: string, pct: number) => `You agree most on ${g} (${pct}%)`,
+  tasteNoPartner: 'Once you both rate movies, your taste match shows up here',
 };
 
 const dict = { nl, en };
