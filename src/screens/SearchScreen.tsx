@@ -13,7 +13,7 @@ import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import {
   searchMovies, discover, loadExtrasBatched, IMG, LOGO,
-  OUR_PROVIDERS, SearchResult, DiscoverSort, Length, LENGTH_OPTIONS, matchesLength,
+  OUR_PROVIDERS, SearchResult, DiscoverSort, Length, LENGTH_OPTIONS, matchesLength, GenreFilter, NO_GENRES,
 } from '../tmdb';
 import { GenreDropdown } from '../GenreDropdown';
 import { addMovie, fetchMovies } from '../db';
@@ -59,7 +59,7 @@ export default function SearchScreen() {
   const [detailFor, setDetailFor] = useState<DetailTarget>(null);
   const [sort, setSort] = useState<DiscoverSort>('popular');
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
-  const [genre, setGenre] = useState<number | null>(null);
+  const [genres, setGenres] = useState<GenreFilter>(NO_GENRES);
   const [length, setLength] = useState<Length>('all');
   const [kids, setKids] = useState(false);
   const [hideSeen, setHideSeen] = useState(true);
@@ -94,7 +94,7 @@ export default function SearchScreen() {
       setResults((prev) => prev.map((x) => {
         const ex = batch[x.tmdb_id];
         return ex
-          ? { ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating, runtime: ex.runtime, providersLoaded: true, extrasLoaded: true }
+          ? { ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: ex.rating ?? x.rating, runtime: ex.runtime, providersLoaded: true, extrasLoaded: true }
           : x;
       }));
     }, (id) => setResults((prev) => prev.map((x) => (x.tmdb_id === id ? { ...x, extrasLoaded: true } : x))));
@@ -119,7 +119,7 @@ export default function SearchScreen() {
     browseGen.current++;
     setLoading(true);
     setPage(1);
-    discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: 1, genre, length, kids, yearFrom, yearTo })
+    discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: 1, genres, length, kids, yearFrom, yearTo })
       .then((d) => {
         if (cancelled) return;
         setResults(d.results);
@@ -129,7 +129,7 @@ export default function SearchScreen() {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [service, streamingOnly, sort, titleLang, genre, length, kids, yearFrom, yearTo, query, services.join(',')]);
+  }, [service, streamingOnly, sort, titleLang, genres, length, kids, yearFrom, yearTo, query, services.join(',')]);
 
   // Years are typed as drafts and applied when the field or the filter sheet is left.
   const commitYears = (fromS = fromDraft, toS = toDraft) => {
@@ -147,7 +147,7 @@ export default function SearchScreen() {
     const gen = browseGen.current;
     try {
       const next = page + 1;
-      const d = await discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: next, genre, length, kids, yearFrom, yearTo });
+      const d = await discover({ providerId: service, streaming: streamingOnly, streamingIds: myProviders.map((p) => p.id), sort, lang: titleLang, page: next, genres, length, kids, yearFrom, yearTo });
       if (gen !== browseGen.current) return;
       setResults((prev) => {
         const seenIds = new Set(prev.map((r) => r.tmdb_id));
@@ -204,7 +204,7 @@ export default function SearchScreen() {
     visible = [...visible].sort((a, b) => (a.runtime ?? 9999) - (b.runtime ?? 9999));
   }
 
-  const filterCount = (genre ? 1 : 0) + (length !== 'all' ? 1 : 0) + (kids ? 1 : 0) + (yearFrom || yearTo ? 1 : 0);
+  const filterCount = (genres.ids.length ? 1 : 0) + (length !== 'all' ? 1 : 0) + (kids ? 1 : 0) + (yearFrom || yearTo ? 1 : 0);
 
   // With a length filter a page can thin out a lot; top it up automatically (a few pages max).
   const browsing = !query.trim();
@@ -356,7 +356,7 @@ export default function SearchScreen() {
          <View style={styles.filterSheet}>
            <View style={styles.filterHeaderRow}>
              <Text style={styles.filterHeader}>{t.filters}</Text>
-             <TouchableOpacity onPress={() => { setGenre(null); setLength('all'); setKids(false); setHideSeen(true); setHideListed(true); commitYears('', ''); }}>
+             <TouchableOpacity onPress={() => { setGenres(NO_GENRES); setLength('all'); setKids(false); setHideSeen(true); setHideListed(true); commitYears('', ''); }}>
                <Text style={styles.clearText}>{t.clear}</Text>
              </TouchableOpacity>
            </View>
@@ -406,7 +406,7 @@ export default function SearchScreen() {
            </View>
 
            <Text style={styles.filterLabel}>{t.genreLabel}</Text>
-           <GenreDropdown value={genre} onChange={setGenre} />
+           <GenreDropdown value={genres} onChange={setGenres} />
 
            <View style={styles.kidsRow}>
              <Text style={styles.filterLabel}>{t.hideSeen}</Text>

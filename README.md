@@ -30,6 +30,11 @@ in Dutch.
 - **Movie roulette** 🎲 — Material FAB, 10s countdown that accelerates into a
   slot-machine poster spin (with escalating haptics) and lands on the winner with confetti
 - **Per-person ratings** (editable later without changing the watch date)
+- **IMDb ratings** everywhere instead of TMDB's — from a bundled list of ~270k movies
+  (instant, offline); only new or missing movies are looked up live (OMDb or Cinemeta)
+  and remembered for a long time
+- **Hype votes** 🔥 — hype movies on the watchlist; your partner's vote stays secret until
+  you've both hyped it, then it gets a flame (and a filter)
 - **Offline cache** — the list, movie details and recommendations open instantly, even
   without internet; TMDB requests are deduplicated and throttled
 - Micro-animations + haptics throughout; cinema-red theme with a photo backdrop
@@ -46,19 +51,36 @@ open work and ideas.
 2. Copy `src/config.example.ts` to `src/config.ts` and fill in your own keys:
    - A **TMDB** API Read Access Token — https://www.themoviedb.org/settings/api
    - Your **Supabase** project URL and publishable key — https://supabase.com
+   - Optional: a free **OMDb** key for live IMDb ratings of new movies (without it the
+     app uses Stremio's free Cinemeta service)
 3. In Supabase:
    - Enable **Anonymous sign-ins** (Authentication → Sign In / Providers)
-   - Run `supabase_setup.sql`, then `supabase_v1_1_security.sql` in the SQL editor
-   - Once every device runs v1.1+, run `supabase_v1_1_lockdown.sql` to remove the
+   - Run `supabase/supabase_setup.sql`, then `supabase/supabase_v1_1_security.sql` in the SQL editor
+   - Once every device runs v1.1+, run `supabase/supabase_v1_1_lockdown.sql` to remove the
      legacy open access
+   - Run `supabase/supabase_v1_4_hype.sql` for hype votes
 4. Start the dev server and open in Expo Go:
    ```bash
    npx expo start
    ```
 
-## Build an Android APK
+## Release (APK + download page)
+
+`scripts/release.sh` refreshes the IMDb ratings, builds the signed APK and publishes it
+with a small download page on https://coenvermeer.nl/movienight/ (`--no-upload` builds
+only, into `dist/site/`). Before a release: bump `version`/`versionCode` in `app.json` and
+add an entry to `release-notes.md` (shown on the page) and `CHANGELOG.md`. Signing uses the
+`MN_*` properties in `~/.gradle/gradle.properties` (see `plugins/withReleaseSigning.js`).
+
+## Build an Android APK manually
+
+
+First refresh the bundled IMDb ratings (downloads IMDb's daily dataset, ~20 s). The
+generated `src/imdbData.ts` is git-ignored: IMDb's data is for personal use only.
+`npm install` creates an empty placeholder, in which case all ratings are looked up live.
 
 ```bash
+npm run imdb
 npx expo prebuild --platform android   # first time only
 cd android && ./gradlew assembleRelease
 ```

@@ -2,6 +2,20 @@
 
 All notable changes to MovieNight / Filmavond.
 
+## 1.4.0 — 2026-10-08 (versionCode 5)
+
+### New
+- **IMDb ratings** instead of TMDB's, everywhere (lists, posters, details — labelled
+  "IMDb" in the details sheet). A bundled list of ~270k movies (`npm run imdb`) answers
+  instantly; movies missing from it, or still new, are looked up live (OMDb with a key,
+  otherwise Cinemeta) and cached for 3 days (new releases) up to half a year. Falls back
+  to TMDB when IMDb has no rating.
+- **Hype votes** 🔥 on the watchlist: tap the flame on a movie. Your partner's vote stays
+  hidden until you've both hyped it — then it gets a flame, a toast for both of you, and
+  a "only movies you both hyped" filter. Needs `supabase/supabase_v1_4_hype.sql`.
+- **Multiple genres** in the search and watchlist filters, with "any of these" /
+  "all of these".
+
 ## 1.3.0 — 2026-09-26 (versionCode 4)
 
 ### Fixed

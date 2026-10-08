@@ -13,6 +13,8 @@ export const theme = {
   textFaint: '#8A756D',
   border: '#3A2A25',
   green: '#3FB27F',
+  flame: '#FF7A1A',      // hype 🔥
+  flameSoft: 'rgba(255,122,26,0.16)',
 };
 
 export const radius = { sm: 8, md: 12, lg: 16 };

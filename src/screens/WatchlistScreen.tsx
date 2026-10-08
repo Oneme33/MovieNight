@@ -21,8 +21,8 @@ import { Background } from '../Background';
 import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { supabase, MovieRow } from '../supabase';
-import { fetchMovies, deleteMovie, persistOrder, markSeen, unmarkSeen } from '../db';
-import { IMG, LOGO, loadExtrasBatched, MovieExtras, Length, LENGTH_OPTIONS, matchesLength } from '../tmdb';
+import { fetchMovies, deleteMovie, persistOrder, markSeen, unmarkSeen, setHype, hypeOf } from '../db';
+import { IMG, LOGO, loadExtrasBatched, MovieExtras, Length, LENGTH_OPTIONS, matchesLength, GenreFilter, NO_GENRES, matchesGenres } from '../tmdb';
 import { GenreDropdown } from '../GenreDropdown';
 import { SkeletonList } from '../Loader';
 import { computeTasteMatch, TasteMatchCard, TasteMatchModal } from '../TasteMatch';
@@ -80,9 +80,9 @@ function SwipeAction(props: {
 // Poster tile for the grid view; actions go through the ⋯ button (same pattern as For You).
 const GRID_W = Math.floor((Dimensions.get('window').width - 32 - 20) / 3);
 
-function GridCard({ item, title, ex, onOpen, onAction }: {
+function GridCard({ item, title, ex, onOpen, onAction, myName }: {
   item: MovieRow; title: string; ex?: MovieExtras;
-  onOpen: (m: MovieRow) => void; onAction: (m: MovieRow) => void;
+  onOpen: (m: MovieRow) => void; onAction: (m: MovieRow) => void; myName?: string;
 }) {
   const poster = item.poster_path ? IMG(item.poster_path, 'w342') : null;
   const myAvg = avg(item.ratings);
@@ -104,6 +104,11 @@ function GridCard({ item, title, ex, onOpen, onAction }: {
             <Ionicons name="star" size={9} color={theme.gold} />
             <Text style={gc.badgeText}>{ex.rating.toFixed(1)}</Text>
           </View>
+        ) : null}
+        {!item.seen && hypeOf(item, myName).both ? (
+          <Animated.View entering={ZoomIn.springify()} style={gc.flame}>
+            <Ionicons name="flame" size={14} color={theme.flame} />
+          </Animated.View>
         ) : null}
         <TouchableOpacity style={gc.action} onPress={() => onAction(item)}>
           <Ionicons name="ellipsis-horizontal" size={15} color={theme.red} />
@@ -133,6 +138,11 @@ const gc = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   title: { color: theme.textMuted, fontSize: 11, lineHeight: 15, marginTop: 5 },
+  flame: {
+    position: 'absolute', top: 5, right: 5, width: 24, height: 24, borderRadius: 12,
+    backgroundColor: 'rgba(12,8,7,0.8)', borderWidth: 1, borderColor: theme.flame,
+    alignItems: 'center', justifyContent: 'center',
+  },
 });
 
 // Stable card component (defined outside the screen → swipe stays smooth).
@@ -149,6 +159,7 @@ type CardProps = {
   onMarkSeen: (m: MovieRow) => void;
   onOpen: (m: MovieRow) => void;
   onRate: (m: MovieRow) => void;
+  onHype: (m: MovieRow) => void;
   myName?: string;
 };
 
@@ -245,6 +256,22 @@ const MovieCard = React.memo(function MovieCard(p: CardProps) {
             </View>
           ) : null}
         </View>
+        {!item.seen ? (() => {
+          const h = hypeOf(item, p.myName);
+          return (
+            <TouchableOpacity
+              style={[styles.hypeBtn, h.both && styles.hypeBtnMatch]} onPress={() => p.onHype(item)}
+              hitSlop={8} accessibilityLabel={h.mine ? t.hypeOff : t.hypeOn}
+            >
+              <Animated.View key={h.both ? 'match' : 'single'} entering={h.both ? ZoomIn.springify() : undefined}>
+                <Ionicons
+                  name={h.mine || h.both ? 'flame' : 'flame-outline'} size={h.both ? 20 : 18}
+                  color={h.both ? theme.flame : h.mine ? 'rgba(255,122,26,0.7)' : theme.textFaint}
+                />
+              </Animated.View>
+            </TouchableOpacity>
+          );
+        })() : null}
         {canDrag ? <Ionicons name="reorder-three" size={22} color={theme.textFaint} /> : null}
       </TouchableOpacity>
     </ReanimatedSwipeable>
@@ -270,9 +297,10 @@ export default function WatchlistScreen() {
   const [spinning, setSpinning] = useState(false);
   const [spinIdx, setSpinIdx] = useState(0);
   const spinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [fGenre, setFGenre] = useState<number | null>(null);
+  const [fGenres, setFGenres] = useState<GenreFilter>(NO_GENRES);
   const [fLength, setFLength] = useState<Length>('all');
   const [fKids, setFKids] = useState(false);
+  const [fHype, setFHype] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [gridActionFor, setGridActionFor] = useState<MovieRow | null>(null);
@@ -289,6 +317,9 @@ export default function WatchlistScreen() {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
+  const moviesRef = useRef(movies);
+  moviesRef.current = movies;
+
   // In-app notification when the partner adds or rates a movie while the app is open.
   const onRealtime = useCallback((payload: any) => {
     const me = session?.memberName;
@@ -302,6 +333,12 @@ export default function WatchlistScreen() {
       const newR = n?.ratings ?? {};
       for (const [name, score] of Object.entries(newR)) {
         if (name !== me && oldR[name] !== score) { showToast(t.partnerRated(name, n.title, score)); break; }
+      }
+      // Our own votes are applied locally first, so this only fires for the partner's.
+      const before = moviesRef.current.find((m) => m.id === n?.id);
+      if (n && !n.seen && before && !hypeOf(before).both && hypeOf(n).both) {
+        hSuccess();
+        showToast(t.hypeMatch(n.title));
       }
     }
   }, [session, showToast]);
@@ -398,14 +435,15 @@ export default function WatchlistScreen() {
     let arr = movies.filter((m) => !m.seen);
 
     // Filters combine as AND; movies whose data is unknown are excluded while a filter is active.
-    if (fLength !== 'all' || fGenre || fKids) {
+    if (fHype) arr = arr.filter((m) => hypeOf(m).both);
+    if (fLength !== 'all' || fGenres.ids.length || fKids) {
       arr = arr.filter((m) => {
         const ex = m.tmdb_id ? extras[m.tmdb_id] : undefined;
         if (fLength !== 'all') {
           const rt = ex?.runtime;
           if (rt == null || !matchesLength(rt, fLength)) return false;
         }
-        if (fGenre && !ex?.genreIds?.includes(fGenre)) return false;
+        if (!matchesGenres(ex?.genreIds, fGenres)) return false;
         if (fKids && !(ex?.certAge != null && ex.certAge <= 9)) return false;
         return true;
       });
@@ -424,7 +462,7 @@ export default function WatchlistScreen() {
       arr.sort((a, b) => rt(a) - rt(b));
     } else arr.sort((a, b) => a.position - b.position);
     return arr;
-  }, [movies, sort, extras, displayTitle, fLength, fGenre, fKids]);
+  }, [movies, sort, extras, displayTitle, fLength, fGenres, fKids, fHype]);
 
   const seen = useMemo(() => {
     const arr = movies.filter((m) => m.seen);
@@ -455,6 +493,21 @@ export default function WatchlistScreen() {
   }, [load]);
 
   const onMarkSeen = useCallback((m: MovieRow) => { hTap(); setRatingFor(m); }, []);
+
+  const onHype = useCallback((m: MovieRow) => {
+    const me = session?.memberName;
+    if (!me) return;
+    const on = !hypeOf(m, me).mine;
+    const hype = { ...(m.hype ?? {}) };
+    if (on) hype[me] = true; else delete hype[me];
+    const next = { ...m, hype };
+    patch(m.id, { hype });
+    if (hypeOf(next, me).both && !hypeOf(m, me).both) { hSuccess(); showToast(t.hypeMatch(m.title)); }
+    else hSelect();
+    setHype(m.id, me, on)
+      .then((h) => patch(m.id, { hype: h }))
+      .catch(() => { patch(m.id, { hype: m.hype ?? {} }); showToast(t.hypeFailed); });
+  }, [session, showToast]);
 
   const onOpen = useCallback((m: MovieRow) => {
     if (!m.tmdb_id) return;
@@ -565,7 +618,7 @@ export default function WatchlistScreen() {
     </View>
   );
 
-  const filterCount = (fGenre ? 1 : 0) + (fLength !== 'all' ? 1 : 0) + (fKids ? 1 : 0);
+  const filterCount = (fGenres.ids.length ? 1 : 0) + (fLength !== 'all' ? 1 : 0) + (fKids ? 1 : 0) + (fHype ? 1 : 0);
 
   const viewToggleBtn = (
     <TouchableOpacity style={styles.squareBtn} onPress={toggleView} activeOpacity={0.85}>
@@ -611,7 +664,7 @@ export default function WatchlistScreen() {
   const renderCard = (item: MovieRow, index: number) => (
     <MovieCard item={item} index={index} title={displayTitle(item)} ex={item.tmdb_id ? extras[item.tmdb_id] : undefined}
       canDrag={false} onDelete={onDelete} onUnsee={onUnsee} onMarkSeen={onMarkSeen} onOpen={onOpen}
-      onRate={onMarkSeen} myName={session?.memberName} />
+      onRate={onMarkSeen} onHype={onHype} myName={session?.memberName} />
   );
 
   return (
@@ -642,6 +695,7 @@ export default function WatchlistScreen() {
               ex={item.tmdb_id ? extras[item.tmdb_id] : undefined}
               onOpen={onOpen}
               onAction={(m) => { hTap(); setGridActionFor(m); }}
+              myName={session?.memberName}
             />
           )}
           ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
@@ -659,7 +713,7 @@ export default function WatchlistScreen() {
               <ScaleDecorator>
                 <MovieCard item={item} index={getIndex() ?? 0} title={displayTitle(item)} ex={item.tmdb_id ? extras[item.tmdb_id] : undefined}
                   canDrag drag={drag} isActive={isActive} onDelete={onDelete} onUnsee={onUnsee} onMarkSeen={onMarkSeen} onOpen={onOpen}
-                  onRate={onMarkSeen} myName={session?.memberName} />
+                  onRate={onMarkSeen} onHype={onHype} myName={session?.memberName} />
               </ScaleDecorator>
             )}
             onDragEnd={onDragEnd}
@@ -850,7 +904,7 @@ export default function WatchlistScreen() {
           <View style={styles.filterSheet}>
             <View style={styles.filterHeaderRow}>
               <Text style={styles.filterHeader}>{t.filters}</Text>
-              <TouchableOpacity onPress={() => { setFGenre(null); setFLength('all'); setFKids(false); }}>
+              <TouchableOpacity onPress={() => { setFGenres(NO_GENRES); setFLength('all'); setFKids(false); setFHype(false); }}>
                 <Text style={styles.clearText}>{t.clear}</Text>
               </TouchableOpacity>
             </View>
@@ -865,12 +919,17 @@ export default function WatchlistScreen() {
             </View>
 
             <View style={styles.kidsRow}>
+              <Text style={styles.filterLabel}>{t.hypeFilter}</Text>
+              <Switch value={fHype} onValueChange={setFHype} trackColor={{ true: theme.flame, false: theme.surface2 }} thumbColor="#fff" />
+            </View>
+
+            <View style={styles.kidsRow}>
               <Text style={styles.filterLabel}>{t.kids}</Text>
               <Switch value={fKids} onValueChange={setFKids} trackColor={{ true: theme.red, false: theme.surface2 }} thumbColor="#fff" />
             </View>
 
             <Text style={styles.filterLabel}>{t.genreLabel}</Text>
-            <GenreDropdown value={fGenre} onChange={setFGenre} />
+            <GenreDropdown value={fGenres} onChange={setFGenres} />
 
             <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterOpen(false)}>
               <Text style={styles.applyText}>{t.apply}</Text>
@@ -887,6 +946,12 @@ export default function WatchlistScreen() {
               <TouchableOpacity style={styles.menuItem} onPress={() => { const m = gridActionFor!; setGridActionFor(null); onMarkSeen(m); }}>
                 <Ionicons name="checkmark-done" size={18} color={theme.green} />
                 <Text style={styles.menuItemText}>{t.actionSeen}</Text>
+              </TouchableOpacity>
+            ) : null}
+            {gridActionFor && !gridActionFor.seen ? (
+              <TouchableOpacity style={styles.menuItem} onPress={() => { const m = gridActionFor!; setGridActionFor(null); onHype(m); }}>
+                <Ionicons name={hypeOf(gridActionFor, session?.memberName).mine ? 'flame' : 'flame-outline'} size={18} color={theme.flame} />
+                <Text style={styles.menuItemText}>{hypeOf(gridActionFor, session?.memberName).mine ? t.hypeOff : t.hypeOn}</Text>
               </TouchableOpacity>
             ) : null}
             {gridActionFor?.seen ? (
@@ -1004,6 +1069,8 @@ const styles = StyleSheet.create({
   title: { color: theme.text, fontSize: 15, fontWeight: '600' },
   subRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 3 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  hypeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  hypeBtnMatch: { backgroundColor: theme.flameSoft, borderWidth: 1, borderColor: theme.flame },
   ratingText: { color: theme.gold, fontSize: 12, fontWeight: '600' },
   meta: { color: theme.textMuted, fontSize: 12 },
   logos: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },

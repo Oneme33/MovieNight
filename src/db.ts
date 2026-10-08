@@ -110,3 +110,16 @@ export async function persistOrder(items: MovieRow[]): Promise<void> {
     )
   );
 }
+
+// Hype a movie (or take it back). The server toggles only your own vote.
+export async function setHype(movieId: string, memberName: string, on: boolean): Promise<Record<string, boolean>> {
+  const { data, error } = await supabase.rpc('set_hype', { p_movie: movieId, p_name: memberName, p_on: on });
+  if (error) throw error;
+  return (data ?? {}) as Record<string, boolean>;
+}
+
+// Your partner's vote stays secret until you both hype it — then it's a 🔥 match.
+export const hypeOf = (m: MovieRow, me?: string) => {
+  const names = Object.keys(m.hype ?? {});
+  return { mine: !!me && names.includes(me), both: names.length >= 2 };
+};
