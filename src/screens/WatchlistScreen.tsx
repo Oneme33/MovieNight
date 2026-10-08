@@ -411,7 +411,7 @@ export default function WatchlistScreen() {
   // Each movie's extras are requested once per title language; results arrive in batches.
   const requested = useRef<Set<string>>(new Set());
   const langRef = useRef(titleLang);
-  useEffect(() => { langRef.current = titleLang; setExtras({}); }, [titleLang]);
+  useEffect(() => { langRef.current = titleLang; setExtras({}); requested.current.clear(); }, [titleLang]);
   useEffect(() => {
     const ids = movies
       .map((m) => m.tmdb_id)
@@ -480,17 +480,25 @@ export default function WatchlistScreen() {
   const patch = (id: string, fields: Partial<MovieRow>) =>
     setMovies((prev) => prev.map((m) => (m.id === id ? { ...m, ...fields } : m)));
 
+  // A write failed (offline, server error): undo the optimistic change, say so, resync.
+  const saveFailed = useCallback((undo: () => void) => {
+    undo();
+    showToast(t.saveFailed);
+    load();
+  }, [showToast, load]);
+
   const onDelete = useCallback((m: MovieRow) => {
     hWarn();
     setMovies((prev) => prev.filter((x) => x.id !== m.id));
-    deleteMovie(m.id).catch(() => load());
-  }, [load]);
+    deleteMovie(m.id).catch(() => saveFailed(() =>
+      setMovies((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]))));
+  }, [saveFailed]);
 
   const onUnsee = useCallback((m: MovieRow) => {
     hTap();
     patch(m.id, { seen: false, seen_at: null });
-    unmarkSeen(m.id).catch(() => load());
-  }, [load]);
+    unmarkSeen(m.id).catch(() => saveFailed(() => patch(m.id, { seen: m.seen, seen_at: m.seen_at })));
+  }, [saveFailed]);
 
   const onMarkSeen = useCallback((m: MovieRow) => { hTap(); setRatingFor(m); }, []);
 
@@ -580,7 +588,8 @@ export default function WatchlistScreen() {
   };
 
   const onDragEnd = ({ data }: { data: MovieRow[] }) => {
-    persistOrder(data).catch(() => load());
+    const before = movies;
+    persistOrder(data).catch(() => saveFailed(() => setMovies(before)));
     setMovies((prev) => [...data, ...prev.filter((m) => m.seen)]);
   };
 
@@ -592,7 +601,9 @@ export default function WatchlistScreen() {
     const ratings = { ...(m.ratings ?? {}) };
     if (score != null) ratings[session.memberName] = score; else delete ratings[session.memberName];
     patch(m.id, { seen: true, seen_at: m.seen_at ?? new Date().toISOString(), ratings });
-    markSeen(m, session.memberName, score).catch(() => load());
+    markSeen(m.id, session.memberName, score)
+      .then((row) => { if (row?.id) patch(m.id, { seen: row.seen, seen_at: row.seen_at, ratings: row.ratings }); })
+      .catch(() => saveFailed(() => patch(m.id, { seen: m.seen, seen_at: m.seen_at, ratings: m.ratings })));
   };
 
   const current = SORTS.find((s) => s.key === sort)!;

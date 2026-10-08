@@ -4,8 +4,6 @@ Open work and parked ideas, roughly in priority order. Done items move to
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Next up
-- [ ] **Run `supabase/supabase_v1_1_lockdown.sql`** once both phones run v1.1+ (removes the legacy
-      open access). Checked 2026-10-08: not done yet — `lists open` / `movies open` still exist.
 - [ ] **Real push notifications** (also when the app is closed) when your partner adds or
       rates a movie — needs Expo push tokens + a Supabase trigger / edge function.
 - [ ] **Undo after delete** — a short "Undo" toast instead of deleting immediately.

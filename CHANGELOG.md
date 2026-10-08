@@ -2,7 +2,23 @@
 
 All notable changes to MovieNight / Filmavond.
 
+## 1.4.1 — 2026-10-08 (versionCode 6)
+
+### Fixed
+- **A partner's rating could be overwritten** when you both rated a movie at about the same
+  time: the app wrote the whole ratings object back. Ratings now go through `set_rating()`
+  on the server, which changes only your own score (`supabase/supabase_v1_4_1_ratings.sql`).
+- **Failed saves were lost silently** (offline, server error): supabase-js returns errors
+  instead of throwing, so the rollbacks never ran. Every write now checks for errors; the
+  watchlist undoes the change, shows "Couldn't save" and resyncs.
+- **Switching the title language back and forth** (en → nl → en) left the list without
+  ratings, runtimes and services until a restart.
+
 ## 1.4.0 — 2026-10-08 (versionCode 5)
+
+### Security
+- Lock-down done on the live database (2026-10-08): the legacy open policies `lists open`
+  and `movies open` are gone, so only list members can read or change a list.
 
 ### New
 - **IMDb ratings** instead of TMDB's, everywhere (lists, posters, details — labelled
