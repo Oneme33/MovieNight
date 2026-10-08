@@ -58,7 +58,8 @@ open work and ideas.
    - Run `supabase/supabase_setup.sql`, then `supabase/supabase_v1_1_security.sql` in the SQL editor
    - Once every device runs v1.1+, run `supabase/supabase_v1_1_lockdown.sql` to remove the
      legacy open access
-   - Run `supabase/supabase_v1_4_hype.sql` for hype votes
+   - Run `supabase/supabase_v1_4_hype.sql` (hype votes) and `supabase/supabase_v1_4_1_ratings.sql`
+     (safe ratings)
 4. Start the dev server and open in Expo Go:
    ```bash
    npx expo start
