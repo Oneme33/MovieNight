@@ -24,6 +24,7 @@ export type MovieRow = {
   seen: boolean;
   seen_at: string | null;
   ratings: Record<string, number> | null;
+  hype?: Record<string, boolean> | null; // member name → hyped (v1.4 column)
   added_by: string | null;
   created_at: string;
 };

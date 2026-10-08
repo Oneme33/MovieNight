@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TMDB_TOKEN } from './config';
 import { uiLang, t } from './i18n';
 import type { TitleLang } from './ListContext';
+import { imdbRating } from './imdb';
 
 const BASE = 'https://api.themoviedb.org/3';
 
@@ -53,6 +54,15 @@ export const OUR_PROVIDERS = [
 export const GENRE_OPTIONS: { id: number; name: string }[] =
   [28, 12, 16, 35, 80, 99, 18, 10751, 14, 27, 9648, 10749, 878, 53, 10752]
     .map((id) => ({ id, name: GENRES[id] }));
+
+// Selected genres; `all` = a movie needs every genre, otherwise one of them is enough.
+export type GenreFilter = { ids: number[]; all: boolean };
+export const NO_GENRES: GenreFilter = { ids: [], all: false };
+export function matchesGenres(genreIds: number[] | undefined, f: GenreFilter): boolean {
+  if (!f.ids.length) return true;
+  if (!genreIds?.length) return false;
+  return f.all ? f.ids.every((id) => genreIds.includes(id)) : f.ids.some((id) => genreIds.includes(id));
+}
 
 export type Provider = { name: string; logo_path: string | null; key: string };
 
@@ -110,7 +120,7 @@ export async function searchMovies(query: string, lang: TitleLang = 'en'): Promi
     year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
     poster_path: r.poster_path ?? null,
     genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
-    rating: typeof r.vote_average === 'number' && r.vote_average > 0 ? r.vote_average : null,
+    rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
     ours: [],
     providersLoaded: false,
   }));
@@ -150,7 +160,7 @@ export type DiscoverOpts = {
   sort: DiscoverSort;
   lang?: TitleLang;
   page?: number;
-  genre?: number | null;
+  genres?: GenreFilter;
   length?: Length;
   kids?: boolean;
   yearFrom?: number | null;
@@ -169,8 +179,8 @@ function runtimeParams(len?: Length): string {
 
 // Browse movies: everything, any NL subscription service, or one service — with filters.
 export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
-  const { providerId = null, streaming = false, streamingIds = [], sort, lang = 'en', page = 1, genre = null, length = 'all', kids = false, yearFrom = null, yearTo = null } = o;
-  const cacheKey = `${providerId}:${streaming}:${streamingIds.join('.')}:${sort}:${lang}:${page}:${genre}:${length}:${kids}:${yearFrom}:${yearTo}`;
+  const { providerId = null, streaming = false, streamingIds = [], sort, lang = 'en', page = 1, genres = NO_GENRES, length = 'all', kids = false, yearFrom = null, yearTo = null } = o;
+  const cacheKey = `${providerId}:${streaming}:${streamingIds.join('.')}:${sort}:${lang}:${page}:${genres.ids.join('.')}${genres.all ? '&' : '|'}:${length}:${kids}:${yearFrom}:${yearTo}`;
   const hit = discoverCache.get(cacheKey);
   if (hit) return { results: hit.results.map((r: SearchResult) => ({ ...r })), totalPages: hit.totalPages };
   const prov = providerId ? OUR_PROVIDERS.find((p) => p.id === providerId) : undefined;
@@ -182,7 +192,8 @@ export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
   if (providerId) url += `&with_watch_providers=${providerId}`;
   else if (streaming && streamingIds.length) url += `&with_watch_providers=${streamingIds.join('|')}`;
   if (yearFrom) url += `&primary_release_date.gte=${yearFrom}-01-01`;
-  if (genre) url += `&with_genres=${genre}`;
+  // TMDB: comma = all genres, pipe = any of them.
+  if (genres.ids.length) url += `&with_genres=${genres.ids.join(genres.all ? ',' : '|')}`;
   url += runtimeParams(length);
   if (kids) url += '&certification_country=NL&certification.lte=9';
   if (sort === 'rating') url += '&vote_count.gte=100';
@@ -196,7 +207,7 @@ export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
     year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
     poster_path: r.poster_path ?? null,
     genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
-    rating: typeof r.vote_average === 'number' && r.vote_average > 0 ? r.vote_average : null,
+    rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
     ours,
     providersLoaded: !!providerId,
   }));
@@ -227,7 +238,7 @@ export async function usNewPage(lang: TitleLang, page: number): Promise<Discover
       year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
       poster_path: r.poster_path ?? null,
       genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
-      rating: typeof r.vote_average === 'number' && r.vote_average > 0 ? r.vote_average : null,
+      rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
       popularity: typeof r.popularity === 'number' ? r.popularity : 0,
       ours: [],
       providersLoaded: false,
@@ -262,7 +273,7 @@ export async function recommendationsFor(tmdbId: number, lang: TitleLang = 'en',
       year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
       poster_path: r.poster_path ?? null,
       genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
-      rating: typeof r.vote_average === 'number' && r.vote_average > 0 ? r.vote_average : null,
+      rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
       popularity: typeof r.popularity === 'number' ? r.popularity : 0,
       ours: [],
       providersLoaded: false,
@@ -275,7 +286,8 @@ export async function recommendationsFor(tmdbId: number, lang: TitleLang = 'en',
 }
 
 export type MovieExtras = {
-  rating: number | null;
+  rating: number | null; // IMDb when known, otherwise TMDB
+  ratingSource: 'imdb' | 'tmdb' | null;
   ours: Provider[];
   hasFlatrate: boolean; // streamable anywhere in NL (any subscription service)
   title: string | null;
@@ -289,7 +301,7 @@ export type MovieExtras = {
 };
 
 const EMPTY_EXTRAS: MovieExtras = {
-  rating: null, ours: [], hasFlatrate: false, title: null, runtime: null, overview: '', genres: [],
+  rating: null, ratingSource: null, ours: [], hasFlatrate: false, title: null, runtime: null, overview: '', genres: [],
   genreIds: [], certAge: null, trailerKey: null, nlRent: [],
 };
 
@@ -316,7 +328,7 @@ function parseCertAge(data: any): number | null {
 // device so a cold start doesn't have to refetch the whole list.
 const extrasCache = new Map<string, { at: number; ex: MovieExtras }>();
 const extrasInFlight = new Map<string, Promise<MovieExtras>>();
-const EXTRAS_STORE = 'filmavond.extras.v2';
+const EXTRAS_STORE = 'filmavond.extras.v3'; // v3: IMDb ratings
 const EXTRAS_MAX_AGE = 3 * 24 * 3600 * 1000; // streaming availability changes; refresh after 3 days
 const EXTRAS_MAX_ENTRIES = 500;
 const MAX_CONCURRENT = 6;
@@ -431,8 +443,11 @@ async function fetchExtras(tmdbId: number, lang: TitleLang): Promise<MovieExtras
       vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') ??
       vids.find((v: any) => v.site === 'YouTube');
     const ids: number[] = (data.genres ?? []).map((g: any) => g.id);
+    const imdb = await imdbRating(data.imdb_id, data.release_date || null);
+    const tmdb = typeof data.vote_average === 'number' && data.vote_average > 0 ? data.vote_average : null;
     const extras: MovieExtras = {
-      rating: typeof data.vote_average === 'number' && data.vote_average > 0 ? data.vote_average : null,
+      rating: imdb ?? tmdb,
+      ratingSource: imdb != null ? 'imdb' : tmdb != null ? 'tmdb' : null,
       ours: filterOurProviders(flat),
       hasFlatrate: flat.length > 0,
       title: pickTitle(lang, data.title, data.original_title),

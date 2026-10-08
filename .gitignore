@@ -43,6 +43,9 @@ yarn-error.*
 # secrets (keys stay local — use config.example.ts as a template)
 src/config.ts
 
+# IMDb ratings (personal use only) — generate with `npm run imdb`
+src/imdbData.ts
+
 # build output
 *.apk
 *.aab

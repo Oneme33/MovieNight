@@ -57,6 +57,7 @@ export function MovieDetails({ target, lang, onClose }: {
                     <View style={styles.rating}>
                       <Ionicons name="star" size={13} color={theme.gold} />
                       <Text style={styles.ratingText}>{extras.rating.toFixed(1)}</Text>
+                      {extras.ratingSource ? <Text style={styles.ratingSource}>{extras.ratingSource === 'imdb' ? 'IMDb' : 'TMDB'}</Text> : null}
                     </View>
                   ) : null}
                 </View>
@@ -150,6 +151,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   meta: { color: theme.textMuted, fontSize: 13 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  ratingSource: { color: theme.textFaint, fontSize: 11, fontWeight: '600', marginLeft: 2 },
   ratingText: { color: theme.gold, fontSize: 13, fontWeight: '600' },
   genres: { color: theme.textMuted, fontSize: 12, marginTop: 6 },
   closeBtn: { position: 'absolute', right: -4, top: -4, padding: 6 },

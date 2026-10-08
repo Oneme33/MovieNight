@@ -30,7 +30,7 @@ const DISMISSED_KEY = 'filmavond.dismissedRecs';
 const US_NEW_KEY = 'filmavond.usNew';
 
 const withExtras = (x: Rec, ex: MovieExtras): Rec => ({
-  ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: x.rating ?? ex.rating,
+  ...x, ours: ex.ours, hasFlatrate: ex.hasFlatrate, rating: ex.rating ?? x.rating,
   runtime: ex.runtime, certAge: ex.certAge, nlRent: ex.nlRent, providersLoaded: true,
 });
 
