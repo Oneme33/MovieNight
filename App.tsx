@@ -1,4 +1,5 @@
 import React from 'react';
+import { wrapApp } from './src/sentry'; // first: starts crash reporting before anything else runs
 import { View, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
@@ -88,7 +89,7 @@ function Root() {
   return session ? <MainTabs /> : <OnboardingScreen />;
 }
 
-export default function App() {
+function App() {
   const [fontsLoaded] = useFonts({ BebasNeue_400Regular });
   if (!fontsLoaded) {
     return <View style={{ flex: 1, backgroundColor: theme.bg }} />;
@@ -104,3 +105,5 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapApp(App);

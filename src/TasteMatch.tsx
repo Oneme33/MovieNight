@@ -26,8 +26,10 @@ export type TasteMatch =
 const matchPct = (diffs: number[]) =>
   Math.round(100 * (1 - diffs.reduce((a, b) => a + b, 0) / diffs.length / 9));
 
+// `me` and the partner are ratings keys (member ids); `nameOf` turns the partner into a name.
 export function computeTasteMatch(
   movies: MovieRow[], me: string | undefined, extras: Record<number, MovieExtras> = {},
+  nameOf: (key: string) => string = (k) => k,
 ): TasteMatch {
   if (!me) return { state: 'none' };
   const counts = new Map<string, number>();
@@ -40,7 +42,7 @@ export function computeTasteMatch(
   const shared: Duel[] = movies
     .filter((m) => m.ratings?.[me] != null && m.ratings?.[partner] != null)
     .map((m) => ({ movie: m, mine: m.ratings![me], theirs: m.ratings![partner] }));
-  if (shared.length < MIN_SHARED) return { state: 'locked', partner, need: MIN_SHARED - shared.length };
+  if (shared.length < MIN_SHARED) return { state: 'locked', partner: nameOf(partner), need: MIN_SHARED - shared.length };
 
   const diffs = shared.map((d) => Math.abs(d.mine - d.theirs));
   const myAvg = shared.reduce((a, d) => a + d.mine, 0) / shared.length;
@@ -63,7 +65,7 @@ export function computeTasteMatch(
     .sort((a, b) => b.pct - a.pct || b.n - a.n);
 
   return {
-    state: 'ready', partner, pct: matchPct(diffs), n: shared.length, myAvg, partnerAvg,
+    state: 'ready', partner: nameOf(partner), pct: matchPct(diffs), n: shared.length, myAvg, partnerAvg,
     fight: Math.abs(fight.mine - fight.theirs) >= 3 ? fight : undefined,
     love,
     genre: genreRanked.length >= 2 ? genreRanked[0] : undefined,

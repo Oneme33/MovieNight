@@ -60,6 +60,7 @@ open work and ideas.
      legacy open access
    - Run `supabase/supabase_v1_4_hype.sql` (hype votes) and `supabase/supabase_v1_4_1_ratings.sql`
      (safe ratings)
+   - Run `supabase/supabase_v1_5_members.sql` (ratings/hypes by member id, app versions)
 4. Start the dev server and open in Expo Go:
    ```bash
    npx expo start
@@ -69,7 +70,9 @@ open work and ideas.
 
 `scripts/release.sh` refreshes the IMDb ratings, builds the signed APK and publishes it
 with a small download page on https://coenvermeer.nl/movienight/ (`--no-upload` builds
-only, into `dist/site/`). Before a release: bump `version`/`versionCode` in `app.json` and
+only, into `dist/site/`; `--page-only` republishes just the page with the last built APK).
+The page is bilingual (browser language, with an NL/EN switch) and shows the screenshots
+in `site/screenshots/` with captions from `site/screenshots.json`. Before a release: bump `version`/`versionCode` in `app.json` and
 add an entry to `release-notes.md` (shown on the page) and `CHANGELOG.md`. Signing uses the
 `MN_*` properties in `~/.gradle/gradle.properties` (see `plugins/withReleaseSigning.js`).
 

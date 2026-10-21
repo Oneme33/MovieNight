@@ -10,6 +10,8 @@ import { t } from '../i18n';
 import { useSession } from '../ListContext';
 import { leaveList } from '../db';
 import { OUR_PROVIDERS, LOGO } from '../tmdb';
+import { APP_VERSION } from '../version';
+import { UpdateBanner } from '../UpdateBanner';
 
 const LANGS: { key: 'en' | 'nl' | 'original'; label: string }[] = [
   { key: 'en', label: t.langEn },
@@ -30,7 +32,7 @@ export default function SettingsScreen() {
 
   const onSave = async () => {
     if (!name.trim()) return Alert.alert(t.errName);
-    await updateName(name.trim());
+    try { await updateName(name.trim()); } catch { return Alert.alert(t.renameFailed); }
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };
@@ -62,6 +64,7 @@ export default function SettingsScreen() {
 
   return (
     <Background>
+     <UpdateBanner />
      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.section}>{t.yourName}</Text>
       <Text style={styles.hint}>{t.nameHint}</Text>
@@ -144,6 +147,7 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={styles.attribution}>{t.attribution}</Text>
+      <Text style={styles.version}>{t.versionLabel} {APP_VERSION}</Text>
      </ScrollView>
     </Background>
   );
@@ -169,6 +173,7 @@ const styles = StyleSheet.create({
     padding: 14, alignItems: 'center', marginTop: 12,
   },
   attribution: { color: theme.textFaint, fontSize: 11, textAlign: 'center', marginTop: 36, lineHeight: 16 },
+  version: { color: theme.textFaint, fontSize: 11, textAlign: 'center', marginTop: 6 },
   codeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   pairDivider: { height: 1, backgroundColor: theme.border, alignSelf: 'stretch', marginVertical: 14 },
   code: { color: theme.red, fontSize: 21, fontWeight: '700', letterSpacing: 3 },

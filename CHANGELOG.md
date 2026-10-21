@@ -2,6 +2,24 @@
 
 All notable changes to MovieNight / Filmavond.
 
+## 1.5.0 — 2026-10-21 (versionCode 7)
+
+### Changed
+- **Identity by member id instead of display name.** Ratings, hype votes and "added by" are
+  keyed by `list_members.id` (`supabase/supabase_v1_5_members.sql` converts existing data and
+  keeps a backup table). Renaming yourself no longer orphans your ratings; names come from the
+  member list. Rejoining with your name (reinstall, new phone) takes over your member again.
+  Older apps keep working: their name-based calls are mapped to member ids on the server.
+- **Code split into small modules** (max ~300 lines per file): `src/watchlist/`, `src/search/`,
+  `src/foryou/`, `src/tmdb/`, `src/i18n/`. No behaviour change.
+
+### New
+- **App version per member** (`list_members.app_version` / `last_seen_at`), version shown in
+  Settings, and a **"new version available"** banner when coenvermeer.nl/movienight has a newer
+  APK (`version.json` on the download page).
+- **Crash reporting with Sentry**, active once `SENTRY_DSN` is set in `src/config.ts`.
+- Onboarding hint: one of you creates the list, the other joins with the code.
+
 ## 1.4.1 — 2026-10-08 (versionCode 6)
 
 ### Fixed

@@ -23,11 +23,14 @@ export type MovieRow = {
   position: number;
   seen: boolean;
   seen_at: string | null;
-  ratings: Record<string, number> | null;
-  hype?: Record<string, boolean> | null; // member name → hyped (v1.4 column)
-  added_by: string | null;
+  ratings: Record<string, number> | null; // member id → score (v1.5; older rows may still use names)
+  hype?: Record<string, boolean> | null; // member id → hyped
+  added_by: string | null; // display name at the time (fallback)
+  added_by_member?: string | null; // member id (v1.5)
   created_at: string;
 };
+
+export type MemberRow = { id: string; name: string };
 
 export type ListRow = {
   id: string;

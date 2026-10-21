@@ -93,6 +93,7 @@ export default function OnboardingScreen() {
             <Ionicons name="enter-outline" size={20} color={theme.text} />
             <Text style={styles.secondaryText}>{t.joinCode}</Text>
           </TouchableOpacity>
+          <Text style={styles.pairHint}>{t.pairHint}</Text>
         </View>
       )}
 
@@ -197,6 +198,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: theme.border,
   },
   secondaryText: { color: theme.text, fontSize: 16, fontWeight: '600' },
+  pairHint: { color: theme.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 14, paddingHorizontal: 8 },
   backBtn: { alignItems: 'center', paddingVertical: 10 },
   backText: { color: theme.textMuted, fontSize: 14 },
   scanBtn: {

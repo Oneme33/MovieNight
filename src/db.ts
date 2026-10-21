@@ -1,4 +1,4 @@
-import { supabase, ListRow, MovieRow } from './supabase';
+import { supabase, ListRow, MovieRow, MemberRow } from './supabase';
 
 // supabase-js returns errors instead of throwing; throw them so callers can roll back.
 const check = <T extends { error: unknown }>(res: T): T => {
@@ -83,10 +83,10 @@ export async function deleteMovie(id: string): Promise<void> {
   check(await supabase.from('movies').delete().eq('id', id));
 }
 
-// Mark as seen with your optional rating (or edit it later). The server changes only
-// your own score and keeps the original watch date (supabase_v1_4_1_ratings.sql).
-export async function markSeen(movieId: string, memberName: string, score: number | null): Promise<MovieRow> {
-  const { data } = check(await supabase.rpc('set_rating', { p_movie: movieId, p_name: memberName, p_score: score }));
+// Mark as seen with your optional rating (or edit it later). The server changes only your
+// own score (keyed by your member id) and keeps the original watch date.
+export async function markSeen(movieId: string, score: number | null): Promise<MovieRow> {
+  const { data } = check(await supabase.rpc('rate_movie', { p_movie: movieId, p_score: score }));
   return data as MovieRow;
 }
 
@@ -104,10 +104,26 @@ export async function persistOrder(items: MovieRow[]): Promise<void> {
 }
 
 // Hype a movie (or take it back). The server toggles only your own vote.
-export async function setHype(movieId: string, memberName: string, on: boolean): Promise<Record<string, boolean>> {
-  const { data, error } = await supabase.rpc('set_hype', { p_movie: movieId, p_name: memberName, p_on: on });
-  if (error) throw error;
+export async function setHype(movieId: string, on: boolean): Promise<Record<string, boolean>> {
+  const { data } = check(await supabase.rpc('hype_movie', { p_movie: movieId, p_on: on }));
   return (data ?? {}) as Record<string, boolean>;
+}
+
+// Everyone in the list (id → name is how ratings and hypes are shown).
+export async function fetchMembers(listId: string): Promise<MemberRow[]> {
+  const { data } = check(await supabase.from('list_members').select('id, name').eq('list_id', listId));
+  return (data as MemberRow[]) ?? [];
+}
+
+// On app start: records which app version you run and returns your member id + name
+// (null when you're not a member of the list).
+export async function touchMember(listId: string, appVersion: string): Promise<MemberRow | null> {
+  const { data } = check(await supabase.rpc('touch_member', { p_list: listId, p_app_version: appVersion }));
+  return ((data as MemberRow[]) ?? [])[0] ?? null;
+}
+
+export async function renameMember(listId: string, name: string): Promise<void> {
+  check(await supabase.rpc('rename_member', { p_list: listId, p_name: name }));
 }
 
 // Your partner's vote stays secret until you both hype it — then it's a 🔥 match.
