@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="nl" data-lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Filmavond downloaden</title>
+<meta property="og:title" content="MovieNight / Filmavond">
+<meta property="og:description" content="Jullie gedeelde kijklijst · Your shared watchlist">
+<meta property="og:image" content="https://coenvermeer.nl/movienight/icon.png">
+<link rel="icon" href="icon.png">
+<link rel="preload" href="fonts/BebasNeue-Regular.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="style.css?v={{VERSION}}">
+</head>
+<body>
+<main>
+  <div class="langs" role="group" aria-label="Language">
+    <button type="button" data-set="nl">NL</button><button type="button" data-set="en">EN</button>
+  </div>
+
+  <div class="hero">
+    <div class="brand">
+      <img src="icon.png" alt="">
+      <div>
+        <h1><span lang="nl">Filmavond</span><span lang="en">MovieNight</span></h1>
+        <p class="sub"><span lang="nl">Jullie gedeelde kijklijst</span><span lang="en">Your shared watchlist</span></p>
+      </div>
+    </div>
+    <div class="get">
+      <a class="dl" href="{{APK}}" download>⬇ <span lang="nl">Download versie {{VERSION}}</span><span lang="en">Download version {{VERSION}}</span></a>
+      <p class="meta">Android · {{SIZE}} MB · <span lang="nl">{{DATE_NL}}</span><span lang="en">{{DATE_EN}}</span></p>
+    </div>
+  </div>
+
+  <div class="showcase">
+    <button type="button" class="feature" id="feature" aria-label="Screenshot">
+{{FEATURE}}
+    </button>
+    <div>
+      <div class="story" id="story">{{STORY}}</div>
+      <div class="shots" aria-label="Screenshots">
+{{SLIDES}}
+      </div>
+    </div>
+  </div>
+
+  <div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="Screenshot">
+    <button type="button" class="close" id="lb-close" aria-label="Close">×</button>
+    <img id="lb-img" alt="">
+    <div class="row">
+      <button type="button" class="arrow" id="lb-prev" aria-label="Previous">‹</button>
+      <p id="lb-cap"></p>
+      <button type="button" class="arrow" id="lb-next" aria-label="Next">›</button>
+    </div>
+  </div>
+
+  <div class="info">
+    <section>
+      <h2><span lang="nl">Hoe werkt het?</span><span lang="en">How does it work?</span></h2>
+      <dl lang="nl">
+        <dt>Moet ik een account maken?</dt>
+        <dd>Nee. Je kiest alleen een naam; een e-mailadres of wachtwoord is niet nodig.</dd>
+        <dt>Hoe koppel je met z'n tweeën?</dt>
+        <dd>Eén van jullie maakt in de app een nieuwe lijst. Onder Instellingen → Koppelcode staat een code van zes tekens en een QR-code. De ander kiest "Meedoen met een code" en typt de code in of scant de QR-code. Daarna zien jullie dezelfde lijst, en wat de een doet, ziet de ander meteen.</dd>
+        <dt>Is de app gratis?</dt>
+        <dd>Ja, helemaal gratis en zonder advertenties.</dd>
+        <dt>Werkt het ook op een iPhone?</dt>
+        <dd>Nog niet, de app is er alleen voor Android.</dd>
+      </dl>
+      <dl lang="en">
+        <dt>Do I need an account?</dt>
+        <dd>No. You just pick a name; no email address or password needed.</dd>
+        <dt>How do the two of you connect?</dt>
+        <dd>One of you creates a new list in the app. Under Settings → Pairing code there's a six-character code and a QR code. The other taps "Join with a code" and types the code or scans the QR code. From then on you share the same list, and whatever one of you does, the other sees right away.</dd>
+        <dt>Is it free?</dt>
+        <dd>Yes, completely free and without ads.</dd>
+        <dt>Does it work on iPhone?</dt>
+        <dd>Not yet, the app is Android only.</dd>
+      </dl>
+    </section>
+    <div class="col">
+      <section>
+        <h2><span lang="nl">Installeren</span><span lang="en">How to install</span></h2>
+        <ol lang="nl">
+          <li>Tik op de downloadknop en open het bestand als het binnen is.</li>
+          <li>Vraagt Android om toestemming voor "onbekende apps", sta die dan toe voor je browser.</li>
+          <li>Tik op <strong>Installeren</strong> of <strong>Bijwerken</strong>. Je lijst en koppeling blijven gewoon staan.</li>
+        </ol>
+        <ol lang="en">
+          <li>Tap the download button and open the file once it's done.</li>
+          <li>If Android asks about "unknown apps", allow it for your browser.</li>
+          <li>Tap <strong>Install</strong> or <strong>Update</strong>. Your list and pairing stay as they are.</li>
+        </ol>
+      </section>
+      <section>
+        <h2><span lang="nl">Wat is er nieuw</span><span lang="en">What's new</span></h2>
+{{VERSIONS}}
+      </section>
+    </div>
+  </div>
+</main>
+<script src="app.js?v={{VERSION}}"></script>
+</body>
+</html>
