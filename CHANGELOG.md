@@ -8,6 +8,9 @@ All notable changes to MovieNight / Filmavond.
 - **Crash reporting is on** (Sentry project `coenvermeernl/movienight`, EU region). Source maps
   are uploaded at build time when a Sentry auth token is in `~/.sentryclirc`.
 - Long-press the version in Settings to send a test report.
+- Source maps for 1.5.1 uploaded afterwards (release `filmavond@1.5.1+8`): its reports show our
+  source files. From the next build on, `metro.config.js` adds Sentry Debug IDs and the build
+  uploads the maps itself (token in `~/.sentryclirc`), so every report is readable right away.
 
 ## 1.5.0 — 2026-10-21 (versionCode 7)
 
