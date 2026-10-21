@@ -2,6 +2,31 @@
 
 All notable changes to MovieNight / Filmavond.
 
+## 1.5.1 — 2026-10-21 (versionCode 8)
+
+### New
+- **Crash reporting is on** (Sentry project `coenvermeernl/movienight`, EU region). Source maps
+  are uploaded at build time when a Sentry auth token is in `~/.sentryclirc`.
+- Long-press the version in Settings to send a test report.
+
+## 1.5.0 — 2026-10-21 (versionCode 7)
+
+### Changed
+- **Identity by member id instead of display name.** Ratings, hype votes and "added by" are
+  keyed by `list_members.id` (`supabase/supabase_v1_5_members.sql` converts existing data and
+  keeps a backup table). Renaming yourself no longer orphans your ratings; names come from the
+  member list. Rejoining with your name (reinstall, new phone) takes over your member again.
+  Older apps keep working: their name-based calls are mapped to member ids on the server.
+- **Code split into small modules** (max ~300 lines per file): `src/watchlist/`, `src/search/`,
+  `src/foryou/`, `src/tmdb/`, `src/i18n/`. No behaviour change.
+
+### New
+- **App version per member** (`list_members.app_version` / `last_seen_at`), version shown in
+  Settings, and a **"new version available"** banner when coenvermeer.nl/movienight has a newer
+  APK (`version.json` on the download page).
+- **Crash reporting with Sentry**, active once `SENTRY_DSN` is set in `src/config.ts`.
+- Onboarding hint: one of you creates the list, the other joins with the code.
+
 ## 1.4.1 — 2026-10-08 (versionCode 6)
 
 ### Fixed
@@ -79,12 +104,12 @@ All notable changes to MovieNight / Filmavond.
 - In-app notifications: catch-up banner and live toasts for partner activity.
 - Micro-animations and haptics; arm64-only APK (~40 MB).
 
-## 1.1.0 (versionCode 2)
+## 1.1.0 — 2026-07-04 (versionCode 2)
 - Security: anonymous auth + row-level security via list membership.
 - QR-code pairing; To watch / Seen tabs; filters (length, genre, kid-friendly).
 - Selectable streaming services; For You recommendations; movie details + trailer;
   movie roulette; unreleased movies hidden.
 
-## 1.0.0
+## 1.0.0 — 2026-07-01
 - Shared watchlist with live sync, TMDB search, Dutch streaming availability, seen +
   per-person ratings, sorting, cinema theme, installable APK.

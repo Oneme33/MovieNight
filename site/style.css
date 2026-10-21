@@ -1,0 +1,113 @@
+@font-face { font-family:'Bebas Neue'; src:url('fonts/BebasNeue-Regular.ttf') format('truetype'); font-display:swap; }
+:root { --bg:#17110F; --card:#211714; --text:#F6F1EE; --muted:#B7A69E; --faint:#8A756D; --red:#E11D2A; --border:#3A2A25; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+html[data-lang="nl"] body [lang="en"], html[data-lang="en"] body [lang="nl"] { display:none !important; }
+main { position:relative; max-width:1080px; margin:0 auto; padding:28px 24px 48px; }
+button { font:inherit; }
+
+/* Language switch */
+.langs { position:absolute; top:24px; right:24px; display:flex; border:1px solid var(--border); border-radius:999px; padding:2px; }
+.langs button { background:none; border:0; color:var(--faint); font:600 12px/1 system-ui,sans-serif; letter-spacing:.6px;
+                padding:6px 10px; border-radius:999px; cursor:pointer; }
+.langs button[aria-pressed="true"] { background:var(--card); color:var(--text); }
+
+/* Top: name, what it is, download */
+.hero { display:flex; align-items:center; gap:24px 48px; flex-wrap:wrap; padding-right:110px; }
+.brand { display:flex; align-items:center; gap:18px; flex:1 1 420px; }
+.brand img { width:84px; height:84px; border-radius:20px; flex:none; }
+h1 { margin:0; font:400 46px/1 'Bebas Neue',system-ui,sans-serif; letter-spacing:3px; }
+.sub { color:var(--text); margin:4px 0 0; font-weight:600; }
+.get { flex:0 1 300px; }
+.dl { display:flex; align-items:center; justify-content:center; gap:10px; padding:15px 22px; background:var(--red);
+      color:#fff; text-decoration:none; font-weight:700; font-size:18px; border-radius:14px; }
+.dl:active { transform:scale(.98); }
+.meta { text-align:center; color:var(--faint); font-size:14px; margin:8px 0 0; }
+
+/* Screens: one large screenshot with its story, small clickable ones beside it */
+.showcase { display:grid; grid-template-columns:270px 1fr; gap:56px; align-items:center; margin-top:44px; }
+.feature { padding:0; border:0; background:none; cursor:zoom-in; display:block; }
+.feature img, .shot img { display:block; width:100%; height:auto; aspect-ratio:1080/2400; border:1px solid var(--border);
+                          background:var(--card); }
+.feature img { border-radius:24px; box-shadow:0 14px 36px rgba(0,0,0,.45); transition:opacity .2s; }
+.feature.fading img { opacity:0; }
+.story h2 { margin:0; font-size:26px; line-height:1.2; }
+.story p { margin:8px 0 0; color:var(--muted); font-size:17px; max-width:680px; min-height:3.2em; }
+.shots { display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; margin-top:28px; max-width:680px; }
+.shot { margin:0; padding:0; border:0; background:none; cursor:pointer; text-align:left; }
+.shot img { border-radius:12px; opacity:.4; filter:saturate(.7); transition:opacity .2s, filter .2s, outline-color .2s;
+            outline:2px solid transparent; outline-offset:3px; }
+.shot:hover img, .shot:focus-visible img { opacity:1; filter:none; }
+.shot[aria-current="true"] img { opacity:1; filter:none; outline-color:var(--red); }
+.shot .cap { display:none; }
+
+/* Practical questions, install, versions */
+.info { display:grid; grid-template-columns:1.15fr 1fr; gap:16px; margin-top:48px; align-items:start; }
+.col { display:grid; gap:16px; }
+section { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 22px; }
+section h2 { font-size:17px; margin:0 0 6px; }
+dl { margin:0; }
+dt { font-weight:600; margin-top:12px; }
+dd { margin:2px 0 0; color:#e8dfda; font-size:15px; }
+ul, ol { margin:6px 0 0; padding-left:20px; }
+li { margin:6px 0; color:#e8dfda; font-size:15px; }
+/* Versions: one line per version (number · date · +/–), the same inside "read more".
+   `>` everywhere, so an open "read more" doesn't mark the versions inside it as open. */
+.versions details > summary { cursor:pointer; font-weight:600; list-style:none; display:flex; align-items:center; gap:12px; padding:10px 0; }
+.versions details > summary::-webkit-details-marker { display:none; }
+.versions .version { border-top:1px solid var(--border); }
+.versions > .version:first-child { border-top:0; }
+.versions .version > summary::after { content:'+'; width:14px; text-align:center; color:var(--faint); font-weight:400; }
+.versions .version[open] > summary::after { content:'–'; }
+.versions .version > div { padding-bottom:6px; }
+.versions .version > div ul { margin-top:0; }
+.versions summary .when { color:var(--faint); font-weight:400; margin-left:auto; }
+/* "Read more: older versions" — a quiet link; once open it disappears and the older
+   versions simply continue the list above. */
+.versions .older { border-top:1px solid var(--border); }
+.versions .older > summary { color:var(--muted); font-weight:500; font-size:14px; text-decoration:underline; text-underline-offset:3px; }
+.versions .older[open] { border-top:0; }
+.versions .older[open] > summary { display:none; }
+
+/* Full-screen viewer */
+.lb { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:14px; padding:20px; background:rgba(10,6,5,.97); backdrop-filter:blur(8px); }
+.lb[hidden] { display:none; }
+.lb img { max-height:calc(100vh - 150px); max-width:92vw; width:auto; height:auto; border-radius:18px; border:1px solid var(--border); }
+.lb p { margin:0; max-width:420px; text-align:center; color:var(--muted); font-size:14px; }
+.lb .row { display:flex; align-items:center; gap:14px; }
+.lb .arrow { flex:none; width:32px; height:32px; border-radius:50%; border:1px solid var(--border); background:none;
+             color:var(--muted); font-size:17px; line-height:1; cursor:pointer; }
+.lb .arrow:disabled { opacity:.3; cursor:default; }
+.lb .close { position:absolute; top:14px; right:14px; width:40px; height:40px; border-radius:50%; border:1px solid var(--border);
+             background:var(--card); color:var(--text); font-size:22px; line-height:1; cursor:pointer; }
+
+/* Desktop: the button follows the title at a generous fixed distance (≈ the middle of the page
+   on wide screens), centred on the logo; the date line hangs below it so it doesn't push it up. */
+@media (min-width: 900px) {
+  .hero { display:grid; grid-template-columns:auto 300px 1fr; column-gap:96px; padding-right:0; }
+  .get { grid-column:2; position:relative; }
+  .meta { position:absolute; left:0; right:0; top:100%; }
+}
+@media (max-width: 899px) {
+  .info { grid-template-columns:1fr; }
+}
+/* Phone / small tablet: Play Store-style strip of small screenshots; tap one to open it. */
+@media (max-width: 699px) {
+  main { padding:20px 16px 40px; }
+  .langs { top:18px; right:16px; }
+  .hero { padding-right:0; }
+  .brand { flex-basis:100%; align-items:flex-start; }
+  .brand img { width:64px; height:64px; border-radius:15px; }
+  h1 { font-size:36px; }
+  .get { flex-basis:100%; }
+  .showcase { display:block; margin-top:24px; }
+  .feature, .story h2, .story p { display:none; }
+  .shots { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; max-width:none;
+           margin:0 -16px 0 0; padding:0 16px 4px 0; overscroll-behavior-x:contain; }
+  .shots::-webkit-scrollbar { display:none; }
+  .shot { flex:0 0 calc((100% - 12px) / 2.4); scroll-snap-align:start; }
+  .shot img { border-radius:14px; opacity:1; filter:none; outline:0; box-shadow:0 6px 16px rgba(0,0,0,.35); }
+  .info { margin-top:32px; }
+}
+@media (prefers-reduced-motion: reduce) { .feature img, .shot img { transition:none; } }

@@ -4,15 +4,10 @@ Open work and parked ideas, roughly in priority order. Done items move to
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Next up
-- [ ] **Identity by user id instead of display name** — ratings, hype and `added_by` are keyed
-      by name, so renaming yourself orphans your ratings (can't edit them, taste match may
-      compare you with yourself, your own adds show up in the catch-up banner) and two people
-      with the same name overwrite each other. Key everything by `auth.uid()` /
-      `list_members`, with a one-time migration of the existing jsonb keys.
-- [ ] **Split `WatchlistScreen.tsx`** (~1100 lines) into components — list card, grid card,
-      filter sheet, rating modal, roulette, realtime/data hook — so every file stays under
-      the 300-line limit (see AGENTS.md). Also over the limit: `ForYouScreen` (~545),
-      `SearchScreen` (~505), `tmdb.ts` (~465), `i18n.ts` (~320).
+- [ ] **Readable Sentry stack traces** — crash reporting is on since 1.5.1 (project
+      `coenvermeernl/movienight`, EU). Put a real org auth token (`sntrys_…`) in
+      `~/.sentryclirc` so builds upload source maps. Then find the Samsung "closes after a
+      while" crash (seen 2026-10-17 on 1.4.1); suspects: memory (posters), realtime/resume path.
 - [ ] **Release signing for more users** — the app is signed with React Native's public debug
       key, so anyone could sign an "update" Android accepts. Before sharing beyond the two of
       us: own release key (or Play App Signing). Existing installs need one reinstall + re-pair.
@@ -39,6 +34,9 @@ Open work and parked ideas, roughly in priority order. Done items move to
 - [ ] Unique index on `(list_id, tmdb_id)` so adding the same movie at the same moment
       can't create a duplicate.
 - [ ] Accessibility labels on icon-only buttons.
+- [ ] Cached movie details keep genre names in the language they were loaded in, so after
+      switching the phone language genres stay in the old language for up to 3 days. Cache
+      genre ids only and translate when rendering.
 
 ## Nice to have
 - [ ] TV series support (seasons/episodes) — parked for now.
