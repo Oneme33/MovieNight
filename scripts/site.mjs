@@ -39,8 +39,8 @@ const entries = read('release-notes.md').split(/^## /m).slice(1).map((chunk) => 
 });
 const list = (items = []) => `<ul>${items.map((i) => `<li>${inline(i)}</li>`).join('')}</ul>`;
 // The newest 3 versions, collapsed; older ones behind a "read more" link.
-const versionBlock = (e) => `        <details>
-          <summary>${esc(e.version)} ${e.date ? `<span class="when">${both(longDate(e.date))}</span>` : ''}</summary>
+const versionBlock = (e) => `        <details class="version">
+          <summary>${esc(e.version)}${e.date ? ` <span class="when">${both(longDate(e.date))}</span>` : ''}</summary>
           ${LANGS.map((l) => `<div lang="${l}">${list(e.notes[l])}</div>`).join('\n          ')}
         </details>`;
 const older = entries.slice(3);

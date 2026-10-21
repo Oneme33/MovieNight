@@ -104,12 +104,12 @@ All notable changes to MovieNight / Filmavond.
 - In-app notifications: catch-up banner and live toasts for partner activity.
 - Micro-animations and haptics; arm64-only APK (~40 MB).
 
-## 1.1.0 (versionCode 2)
+## 1.1.0 — 2026-07-04 (versionCode 2)
 - Security: anonymous auth + row-level security via list membership.
 - QR-code pairing; To watch / Seen tabs; filters (length, genre, kid-friendly).
 - Selectable streaming services; For You recommendations; movie details + trailer;
   movie roulette; unreleased movies hidden.
 
-## 1.0.0
+## 1.0.0 — 2026-07-01
 - Shared watchlist with live sync, TMDB search, Dutch streaming availability, seen +
   per-person ratings, sorting, cinema theme, installable APK.

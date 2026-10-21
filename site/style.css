@@ -51,19 +51,23 @@ dt { font-weight:600; margin-top:12px; }
 dd { margin:2px 0 0; color:#e8dfda; font-size:15px; }
 ul, ol { margin:6px 0 0; padding-left:20px; }
 li { margin:6px 0; color:#e8dfda; font-size:15px; }
-details { border-top:1px solid var(--border); padding:10px 0 2px; }
-details:first-of-type { border-top:0; padding-top:4px; }
-summary { cursor:pointer; font-weight:600; list-style:none; display:flex; justify-content:space-between; gap:12px; }
-summary::-webkit-details-marker { display:none; }
-summary::after { content:'+'; color:var(--faint); font-weight:400; }
-details[open] summary::after { content:'–'; }
-summary .when { color:var(--faint); font-weight:400; margin-left:auto; }
-/* "Read more: older versions" — a quiet link, the versions inside look like the ones above. */
-details.older { border-top:0; padding-top:12px; }
-details.older > summary { color:var(--muted); font-weight:500; font-size:14px; justify-content:flex-start; text-decoration:underline; text-underline-offset:3px; }
-details.older > summary::after { content:''; }
-details.older[open] > summary { display:none; }
-details.older details:first-of-type { border-top:1px solid var(--border); padding-top:10px; }
+/* Versions: one line per version (number · date · +/–), the same inside "read more".
+   `>` everywhere, so an open "read more" doesn't mark the versions inside it as open. */
+.versions details > summary { cursor:pointer; font-weight:600; list-style:none; display:flex; align-items:center; gap:12px; padding:10px 0; }
+.versions details > summary::-webkit-details-marker { display:none; }
+.versions .version { border-top:1px solid var(--border); }
+.versions > .version:first-child { border-top:0; }
+.versions .version > summary::after { content:'+'; width:14px; text-align:center; color:var(--faint); font-weight:400; }
+.versions .version[open] > summary::after { content:'–'; }
+.versions .version > div { padding-bottom:6px; }
+.versions .version > div ul { margin-top:0; }
+.versions summary .when { color:var(--faint); font-weight:400; margin-left:auto; }
+/* "Read more: older versions" — a quiet link; once open it disappears and the older
+   versions simply continue the list above. */
+.versions .older { border-top:1px solid var(--border); }
+.versions .older > summary { color:var(--muted); font-weight:500; font-size:14px; text-decoration:underline; text-underline-offset:3px; }
+.versions .older[open] { border-top:0; }
+.versions .older[open] > summary { display:none; }
 
 /* Full-screen viewer */
 .lb { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center;

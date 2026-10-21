@@ -79,7 +79,7 @@ the newest entry is shown. Technical details go in CHANGELOG.md.
 - **"Watch on …" buttons** in the movie details, and the list also works offline.
 - **In-app notifications** when your partner adds or rates something.
 
-## 1.1.0
+## 1.1.0 — 2026-07-04
 
 ### nl
 - **Veilig gekoppeld:** alleen wie de code of QR-code heeft, ziet jullie lijst. Koppelen kan nu ook met een QR-code.
@@ -93,7 +93,7 @@ the newest entry is shown. Technical details go in CHANGELOG.md.
 - **Pick your own streaming services**, plus movie details with a trailer and the first movie roulette.
 - **For you:** recommendations based on your list. Movies that aren't out yet are hidden.
 
-## 1.0.0
+## 1.0.0 — 2026-07-01
 
 ### nl
 - **De eerste versie:** een gedeelde kijklijst die live meeloopt op jullie telefoons.
