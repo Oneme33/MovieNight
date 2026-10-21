@@ -2,6 +2,13 @@
 
 All notable changes to MovieNight / Filmavond.
 
+## 1.5.1 — 2026-10-21 (versionCode 8)
+
+### New
+- **Crash reporting is on** (Sentry project `coenvermeernl/movienight`, EU region). Source maps
+  are uploaded at build time when a Sentry auth token is in `~/.sentryclirc`.
+- Long-press the version in Settings to send a test report.
+
 ## 1.5.0 — 2026-10-21 (versionCode 7)
 
 ### Changed

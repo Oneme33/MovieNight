@@ -155,5 +155,7 @@ export const en: typeof nl = {
   updateAvailable: (v: string) => `Version ${v} is out, tap to download`,
   versionLabel: 'Version',
   pairHint: 'Sharing a list? One of you creates it, the other taps "Join with a code".',
+  testErrorSent: 'Test report sent to the crash reporter',
+  testErrorOff: 'Crash reporting is off in this version',
   renameFailed: 'Couldn’t change your name, check your connection',
 };

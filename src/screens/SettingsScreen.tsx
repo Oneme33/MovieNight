@@ -12,6 +12,7 @@ import { leaveList } from '../db';
 import { OUR_PROVIDERS, LOGO } from '../tmdb';
 import { APP_VERSION } from '../version';
 import { UpdateBanner } from '../UpdateBanner';
+import { sendTestError } from '../sentry';
 
 const LANGS: { key: 'en' | 'nl' | 'original'; label: string }[] = [
   { key: 'en', label: t.langEn },
@@ -147,7 +148,9 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={styles.attribution}>{t.attribution}</Text>
-      <Text style={styles.version}>{t.versionLabel} {APP_VERSION}</Text>
+      <Text style={styles.version} onLongPress={() => Alert.alert(sendTestError() ? t.testErrorSent : t.testErrorOff)}>
+        {t.versionLabel} {APP_VERSION}
+      </Text>
      </ScrollView>
     </Background>
   );

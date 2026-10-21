@@ -4,10 +4,10 @@ Open work and parked ideas, roughly in priority order. Done items move to
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Next up
-- [ ] **Sentry: fill in `SENTRY_DSN`** in `src/config.ts` (crash reporting is built in since
-      1.5 but off without a DSN), and set `SENTRY_AUTH_TOKEN` (+ org/project in the Sentry Expo
-      plugin) for readable stack traces. Then find the Samsung "closes after a while" crash
-      (seen 2026-10-17 on 1.4.1); suspects: memory (many full-size posters), realtime/resume path.
+- [ ] **Readable Sentry stack traces** — crash reporting is on since 1.5.1 (project
+      `coenvermeernl/movienight`, EU). Put a real org auth token (`sntrys_…`) in
+      `~/.sentryclirc` so builds upload source maps. Then find the Samsung "closes after a
+      while" crash (seen 2026-10-17 on 1.4.1); suspects: memory (posters), realtime/resume path.
 - [ ] **Release signing for more users** — the app is signed with React Native's public debug
       key, so anyone could sign an "update" Android accepts. Before sharing beyond the two of
       us: own release key (or Play App Signing). Existing installs need one reinstall + re-pair.

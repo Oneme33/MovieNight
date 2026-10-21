@@ -3,6 +3,14 @@
 Short, user-facing notes per version for coenvermeer.nl/movienight, in Dutch and English;
 the newest entry is shown. Technical details go in CHANGELOG.md.
 
+## 1.5.1 — 2026-10-21
+
+### nl
+- **Crashmelder aan:** loopt de app vast, dan krijgen we automatisch een melding met waar het misging, zodat we het snel kunnen oplossen. Daarin staan alleen technische gegevens, geen namen.
+
+### en
+- **Crash reporter on:** if the app crashes, we automatically get a report of where it went wrong, so it can be fixed quickly. It only contains technical details, no names.
+
 ## 1.5.0 — 2026-10-21
 
 ### nl

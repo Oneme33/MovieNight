@@ -21,9 +21,9 @@ grep -q "YOUR_" src/config.ts && { echo "src/config.ts still has placeholder key
 grep -q "^MN_STORE_FILE=" ~/.gradle/gradle.properties 2>/dev/null || { echo "MN_* signing properties missing in ~/.gradle/gradle.properties"; exit 1; }
 
 APK=android/app/build/outputs/apk/release/app-release.apk
-# Sentry source maps are uploaded only when a token is set (export SENTRY_AUTH_TOKEN=…);
-# without one the build skips the upload instead of failing.
-[[ -n "${SENTRY_AUTH_TOKEN:-}" ]] || export SENTRY_DISABLE_AUTO_UPLOAD=true
+# Sentry source maps are uploaded only with an auth token (SENTRY_AUTH_TOKEN, or token= in
+# ~/.sentryclirc); without one the build skips the upload instead of failing.
+[[ -n "${SENTRY_AUTH_TOKEN:-}" ]] || grep -q '^token=sntrys_' ~/.sentryclirc 2>/dev/null || export SENTRY_DISABLE_AUTO_UPLOAD=true
 if [[ "${1:-}" != "--page-only" ]]; then
   npm run imdb
   npx expo prebuild --platform android --clean --no-install

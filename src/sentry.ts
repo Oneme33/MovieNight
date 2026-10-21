@@ -25,3 +25,10 @@ export const setCrashUser = (memberId: string | undefined) => {
 
 export const wrapApp = (App: React.ComponentType<Record<string, unknown>>): React.ComponentType<any> =>
   (sentryEnabled ? Sentry.wrap(App) : App);
+
+// Hidden check (long-press the version in Settings): sends a test error. False when reporting is off.
+export const sendTestError = (): boolean => {
+  if (!sentryEnabled) return false;
+  Sentry.captureException(new Error(`MovieNight test error (${APP_VERSION})`));
+  return true;
+};

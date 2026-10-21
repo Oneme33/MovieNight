@@ -2,7 +2,7 @@
   "expo": {
     "name": "MovieNight",
     "slug": "filmavond",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.coenvermeer.filmavond",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "backgroundColor": "#B7121C",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -40,7 +40,14 @@
         }
       ],
       "./plugins/withReleaseSigning",
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "organization": "coenvermeernl",
+          "project": "movienight",
+          "url": "https://sentry.io/"
+        }
+      ]
     ]
   }
 }

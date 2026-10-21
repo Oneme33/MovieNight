@@ -153,5 +153,7 @@ export const nl = {
   updateAvailable: (v: string) => `Versie ${v} is uit, tik om te downloaden`,
   versionLabel: 'Versie',
   pairHint: 'Samen een lijst? Eén van jullie maakt hem aan, de ander kiest "Meedoen met een code".',
+  testErrorSent: 'Testmelding naar de crashmelder gestuurd',
+  testErrorOff: 'De crashmelder staat uit in deze versie',
   renameFailed: 'Naam wijzigen lukte niet, check je internet',
 };
