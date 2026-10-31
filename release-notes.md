@@ -3,6 +3,16 @@
 Short, user-facing notes per version for coenvermeer.nl/movienight, in Dutch and English;
 the newest entry is shown. Technical details go in CHANGELOG.md.
 
+## 1.5.2 — 2026-10-31
+
+### nl
+- **Actuele IMDb-cijfers:** de app haalt dagelijks een nieuwe cijferlijst op, zodat de waarderingen actueel blijven zonder dat je een nieuwe versie hoeft te installeren.
+- **Filmroulette:** de aftelling werkt weer en de app kiest na tien seconden netjes een winnaar.
+
+### en
+- **Up-to-date IMDb ratings:** the app downloads a fresh ratings list every day, so scores stay current without installing a new version.
+- **Movie roulette:** the countdown works again and the app picks a winner after ten seconds.
+
 ## 1.5.1 — 2026-10-21
 
 ### nl

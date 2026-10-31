@@ -19,8 +19,19 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
   const [spinning, setSpinning] = useState(false);
   const [spinIdx, setSpinIdx] = useState(0);
   const spinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Refs keep the timer independent of re-renders (extras arrive in batches, so the
+  // candidates array changes while the countdown runs). Without this the countdown effect
+  // restarted on every batch and never reached zero.
+  const candidatesRef = useRef(candidates);
+  candidatesRef.current = candidates;
+  const spinningRef = useRef(false);
+  const startSpinRef = useRef<() => void>(() => {});
 
-  const stopSpin = () => { if (spinTimer.current) clearTimeout(spinTimer.current); setSpinning(false); };
+  const stopSpin = useCallback(() => {
+    if (spinTimer.current) { clearTimeout(spinTimer.current); spinTimer.current = null; }
+    spinningRef.current = false;
+    setSpinning(false);
+  }, []);
 
   // Reset once it's closed, so the next opening starts a fresh round without a flash of the old one.
   useEffect(() => {
@@ -29,17 +40,19 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
     setSpinIdx(0);
     setResult(null);
     setCountdown(10);
-  }, [visible]);
+  }, [visible, stopSpin]);
 
   const close = () => { stopSpin(); onClose(); };
 
   const startSpin = useCallback(() => {
-    if (!candidates.length || spinning) return;
+    const list = candidatesRef.current;
+    if (!list.length || spinningRef.current) return;
+    spinningRef.current = true;
     setSpinning(true);
     setCountdown((c) => Math.min(c, 3)); // spin covers the final 3 seconds
     hMedium();
-    const winnerIdx = Math.floor(Math.random() * candidates.length);
-    const winner = candidates[winnerIdx];
+    const winnerIdx = Math.floor(Math.random() * list.length);
+    const winner = list[winnerIdx];
     // Crescendo: start slow, accelerate to a blur, then burst into the reveal.
     const delays = [500, 420, 350, 290, 240, 200, 165, 135, 110, 95, 82, 72, 65, 60, 58, 56, 55, 55];
     let i = 0;
@@ -49,14 +62,17 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
       if (i < delays.length) {
         spinTimer.current = setTimeout(step, delays[i++]);
       } else {
+        spinTimer.current = null;
         setSpinIdx(winnerIdx);
         setResult(winner);
+        spinningRef.current = false;
         setSpinning(false);
         hSuccess();
       }
     };
     step();
-  }, [candidates, spinning]);
+  }, []);
+  startSpinRef.current = startSpin;
 
   // Gentle poster carousel while the countdown runs (teases the candidates).
   useEffect(() => {
@@ -67,11 +83,11 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
 
   useEffect(() => {
     if (!visible || result) return;
-    if (countdown === 3 && !spinning) startSpin(); // acceleration kicks in at 3…
+    if (countdown === 3 && !spinningRef.current) startSpinRef.current(); // acceleration kicks in at 3…
     if (countdown <= 0) return; // …and the reveal lands exactly on 0
     const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(timer);
-  }, [visible, result, spinning, countdown, startSpin]);
+  }, [visible, result, countdown]);
 
   // Final countdown you can feel: 5 → one light tap … 1 → five heavy thumps, then the reveal.
   useEffect(() => {

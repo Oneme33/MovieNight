@@ -3,8 +3,8 @@
 A shared movie watchlist for two people, with live sync between phones. Built with
 Expo / React Native, Supabase (database + realtime + anonymous auth) and TMDB
 (movie data + streaming availability). The UI follows the device language
-(English or Dutch); the app is called **MovieNight** in English and **Filmavond**
-in Dutch.
+(English or Dutch, or forced with `UI_LANG` in `src/config.ts`); the app is called
+**MovieNight** in English and **Filmavond** in Dutch.
 
 ## Features
 
@@ -31,8 +31,9 @@ in Dutch.
   slot-machine poster spin (with escalating haptics) and lands on the winner with confetti
 - **Per-person ratings** (editable later without changing the watch date)
 - **IMDb ratings** everywhere instead of TMDB's — from a bundled list of ~270k movies
-  (instant, offline); only new or missing movies are looked up live (OMDb or Cinemeta)
-  and remembered for a long time
+  (instant, offline) that is refreshed daily from `coenvermeer.nl/movienight-data` when
+  online; only new or missing movies are looked up live (OMDb or Cinemeta) and remembered
+  for a long time
 - **Hype votes** 🔥 — hype movies on the watchlist; your partner's vote stays secret until
   you've both hyped it, then it gets a flame (and a filter)
 - **Offline cache** — the list, movie details and recommendations open instantly, even
@@ -68,13 +69,24 @@ open work and ideas.
 
 ## Release (APK + download page)
 
-`scripts/release.sh` refreshes the IMDb ratings, builds the signed APK and publishes it
+`scripts/release.sh` refreshes the bundled IMDb ratings, builds the signed APK and publishes it
 with a small download page on https://coenvermeer.nl/movienight/ (`--no-upload` builds
 only, into `dist/site/`; `--page-only` republishes just the page with the last built APK).
+The app also downloads newer daily ratings from the server (see below), so the bundled
+list only has to be refreshed for new installs and offline use.
 The page is bilingual (browser language, with an NL/EN switch) and shows the screenshots
 in `site/screenshots/` with captions from `site/screenshots.json`. Before a release: bump `version`/`versionCode` in `app.json` and
 add an entry to `release-notes.md` (shown on the page) and `CHANGELOG.md`. Signing uses the
 `MN_*` properties in `~/.gradle/gradle.properties` (see `plugins/withReleaseSigning.js`).
+
+## IMDb ratings on the server
+
+`scripts/server/movienight-imdb.py` runs daily on the coenvermeer.nl server (installed as
+`~/scripts/movienight-imdb.py`, output in `/var/www/coenvermeer.nl/www/movienight-data/`).
+It writes `imdb-ratings.txt` (the same fixed-width format as the bundled list) and
+`imdb-ratings.json` with the build date and movie count. The app checks the JSON on start,
+downloads the TXT only when it is newer than its bundled/cached copy, and validates the
+size before using it.
 
 ## Build an Android APK manually
 

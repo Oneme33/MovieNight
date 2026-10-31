@@ -2,6 +2,21 @@
 
 All notable changes to MovieNight / Filmavond.
 
+## 1.5.2 — 2026-10-31 (versionCode 9)
+
+### New
+- **IMDb ratings stay current.** On start the app checks
+  `coenvermeer.nl/movienight-data/imdb-ratings.json`; when the server has a newer daily
+  list it downloads `imdb-ratings.txt` once, caches it on the device and uses it instead
+  of the bundled list. The bundled list remains the offline fallback, and live lookups for
+  new or missing movies are unchanged. The server job is `scripts/server/movienight-imdb.py`.
+- **UI language can be forced in config** with `UI_LANG: 'auto' | 'nl' | 'en'` in
+  `src/config.ts` (still device-based by default). Title language stays a separate setting.
+
+### Fixed
+- **Movie roulette countdown** could stay stuck because loading movie extras kept
+  restarting the timer; the countdown now runs independently of those re-renders.
+
 ## 1.5.1 — 2026-10-21 (versionCode 8)
 
 ### New
