@@ -10,12 +10,14 @@ the newest entry is shown. Technical details go in CHANGELOG.md.
 - **IMDb-cijfers verversen:** met een knop in Instellingen haal je de nieuwste cijfers op zonder een nieuwe app te installeren.
 - **Vloeiendere filmroulette:** de aftelling werkt weer en de posterrol draait soepel en vertraagt naar de winnaar.
 - **Actuele IMDb-cijfers:** de app haalt dagelijks automatisch een nieuwe cijferlijst op, zodat de waarderingen actueel blijven.
+- **Ook kleine films:** films die niet in de meegeleverde lijst staan, krijgen nu het IMDb-cijfer uit de dagelijkse serverlijst in plaats van een TMDB-cijfer.
 
 ### en
 - **Language in Settings:** choose Dutch, English or automatic; the app switches language immediately.
 - **Refresh IMDb ratings:** a button in Settings downloads the newest scores without installing a new app.
 - **Smoother movie roulette:** the countdown works again and the poster reel spins smoothly and slows down onto the winner.
 - **Up-to-date IMDb ratings:** the app automatically downloads a fresh ratings list every day, so scores stay current.
+- **Smaller films too:** movies missing from the bundled list now get their IMDb score from the daily server list instead of a TMDB score.
 
 ## 1.5.1 — 2026-10-21
 

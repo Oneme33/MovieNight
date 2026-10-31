@@ -27,6 +27,7 @@ export type ImdbSyncResult =
   | { ok: false; error: string };
 
 let ratingData = IMDB_DATA; // bundled until a newer cached/downloaded list is available
+const BUNDLED_COUNT = IMDB_DATA.length / REC;
 
 // Binary search in the sorted fixed-width string: no parsing, no extra memory.
 function bundled(imdbId: string): number | null {
@@ -59,7 +60,9 @@ async function readRemoteMeta(): Promise<RemoteMeta | null> {
 async function loadCachedRemote() {
   if (Platform.OS === 'web') return;
   const meta = await readRemoteMeta();
-  if (!meta || meta.built < IMDB_BUILT) return; // a newer APK's bundled list wins
+  // A newer APK's bundled list wins, unless the server has more movies for the same day.
+  const remoteWins = !!meta && (meta.built > IMDB_BUILT || (meta.built === IMDB_BUILT && meta.count > BUNDLED_COUNT));
+  if (!meta || !remoteWins) return;
   try {
     const file = remoteFile();
     if (!file.exists || file.size !== meta.count * REC) return;
@@ -78,7 +81,10 @@ async function refreshRemote(force = false): Promise<ImdbSyncResult> {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(meta?.built ?? '') || !(meta?.count >= MIN_REMOTE_COUNT)) {
       return { ok: false, error: 'Invalid metadata' };
     }
-    if (!force && meta.built <= IMDB_BUILT) {
+    // The server list uses a lower vote threshold, so on the same day it can still have
+    // many more movies than the bundled list. Count decides, not just the build date.
+    const remoteWins = meta.built > IMDB_BUILT || (meta.built === IMDB_BUILT && meta.count > BUNDLED_COUNT);
+    if (!force && !remoteWins) {
       return { ok: true, built: meta.built, count: meta.count, changed: false };
     }
     const cached = await readRemoteMeta();
@@ -90,6 +96,7 @@ async function refreshRemote(force = false): Promise<ImdbSyncResult> {
     if (downloaded.size !== meta.count * REC) return { ok: false, error: 'Download incomplete' };
     ratingData = await downloaded.text();
     await AsyncStorage.setItem(REMOTE_STORE, JSON.stringify({ built: meta.built, count: meta.count }));
+    onListChanged?.();
     return { ok: true, built: meta.built, count: meta.count, changed: true };
   } catch (e) {
     return { ok: false, error: (e as any)?.message ?? String(e) };
@@ -102,14 +109,18 @@ const STORE = 'filmavond.imdb.v1';
 const DAY = 864e5;
 const live = new Map<string, Live>();
 let hydrated: Promise<void> | null = null;
+let remoteRefresh: Promise<ImdbSyncResult> | null = null;
 const hydrate = () => (hydrated ??= (async () => {
   await loadCachedRemote();
   try {
     const raw = await AsyncStorage.getItem(STORE);
     if (raw) for (const [k, v] of Object.entries(JSON.parse(raw) as Record<string, Live>)) live.set(k, v);
   } catch {}
-  refreshRemote(); // background: updates ratingData for later lookups
+  remoteRefresh = refreshRemote(); // background: updates ratingData for later lookups
 })());
+
+let onListChanged: (() => void) | null = null;
+export function setImdbListChangedHandler(fn: (() => void) | null) { onListChanged = fn; }
 
 let syncing: Promise<ImdbSyncResult> | null = null;
 
@@ -181,7 +192,13 @@ export async function imdbRating(imdbId: string | null | undefined, releaseDate:
   await hydrate();
   const cached = live.get(imdbId);
   if (cached && Date.now() - cached.at < maxAge(releaseDate)) return cached.r;
-  const fromBundle = bundled(imdbId);
+  let fromBundle = bundled(imdbId);
+  // Missing from the bundled list? Wait for the larger server list once, instead of
+  // falling back to TMDB while that download is still running.
+  if (fromBundle == null && remoteRefresh) {
+    await remoteRefresh;
+    fromBundle = bundled(imdbId);
+  }
   if (fromBundle != null && !isRecent(releaseDate)) return fromBundle;
 
   let p = inFlight.get(imdbId);

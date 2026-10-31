@@ -1,7 +1,7 @@
 // Per-movie details ("extras"): IMDb/TMDB rating, NL services, runtime, genres, trailer, age.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { TitleLang } from '../ListContext';
-import { imdbRating } from '../imdb';
+import { imdbRating, setImdbListChangedHandler } from '../imdb';
 import { BASE, apiLang, pickTitle, headers } from './http';
 import { Provider, filterOurProviders, genreName } from './catalog';
 
@@ -48,7 +48,7 @@ function parseCertAge(data: any): number | null {
 // device so a cold start doesn't have to refetch the whole list.
 const extrasCache = new Map<string, { at: number; ex: MovieExtras }>();
 const extrasInFlight = new Map<string, Promise<MovieExtras>>();
-const EXTRAS_STORE = 'filmavond.extras.v3'; // v3: IMDb ratings
+const EXTRAS_STORE = 'filmavond.extras.v4'; // v4: IMDb ratings incl. the larger server list
 const EXTRAS_MAX_AGE = 3 * 24 * 3600 * 1000; // streaming availability changes; refresh after 3 days
 const EXTRAS_MAX_ENTRIES = 500;
 const MAX_CONCURRENT = 6;
@@ -77,6 +77,9 @@ export function resetExtrasCache() {
   extrasInFlight.clear();
   AsyncStorage.removeItem(EXTRAS_STORE).catch(() => {});
 }
+
+// A freshly downloaded IMDb list can turn a TMDB fallback into an IMDb rating.
+setImdbListChangedHandler(resetExtrasCache);
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave() {

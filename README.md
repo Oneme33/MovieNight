@@ -86,8 +86,8 @@ in `site/screenshots/` with captions from `site/screenshots.json`. Before a rele
 `~/scripts/movienight-imdb.py`, output in `/var/www/coenvermeer.nl/www/movienight-data/`).
 It writes `imdb-ratings.txt` (the same fixed-width format as the bundled list) and
 `imdb-ratings.json` with the build date and movie count. The app checks the JSON on start,
-downloads the TXT only when it is newer than its bundled/cached copy, and validates the
-size before using it. Settings has a "refresh IMDb ratings" button that forces this download.
+downloads the TXT when it is newer than its bundled/cached copy or has more movies for the
+same day, and validates the size before using it. Settings has a "refresh IMDb ratings" button that forces this download.
 
 ## Build an Android APK manually
 

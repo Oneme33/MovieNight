@@ -2,7 +2,7 @@
 
 All notable changes to MovieNight / Filmavond.
 
-## 1.5.2 — 2026-10-31 (versionCode 10)
+## 1.5.2 — 2026-10-31 (versionCode 11)
 
 ### New
 - **UI language switch in Settings.** Choose automatic (device), Dutch or English. The choice
@@ -11,16 +11,21 @@ All notable changes to MovieNight / Filmavond.
 - **Manual IMDb sync.** A button in Settings forces a fresh download of the server list,
   clears the live/cached extras and remounts the data screens so new ratings show at once.
 - **IMDb ratings stay current.** On start the app checks
-  `coenvermeer.nl/movienight-data/imdb-ratings.json`; when the server has a newer daily
+  `coenvermeer.nl/movienight-data/imdb-ratings.json`; when the server has a newer or larger
   list it downloads `imdb-ratings.txt` once, caches it on the device and uses it instead
-  of the bundled list. The bundled list remains the offline fallback, and live lookups for
-  new or missing movies are unchanged. The server job is `scripts/server/movienight-imdb.py`.
+  of the bundled list. The bundled list remains the offline fallback. The server job is
+  `scripts/server/movienight-imdb.py`.
 
 ### Fixed
 - **Movie roulette countdown** could stay stuck because loading movie extras kept
   restarting the timer; the countdown now runs independently of those re-renders.
 - **Roulette animation** now uses one continuous Reanimated reel (30 poster steps, 3 s,
   ease-out) instead of a timer per step, so it spins smoothly and lands on the winner.
+- **IMDb ratings for smaller films.** The server list uses a lower vote threshold than the
+  bundled list (10 vs 50 votes), so on the same build date it can still contain many more
+  movies. The app now compares counts instead of only dates, waits for the larger list when
+  a movie is missing, and clears cached extras when it arrives. Titles that previously fell
+  back to a TMDB score now get their IMDb rating. The extras cache moved to v4.
 
 ## 1.5.1 — 2026-10-21 (versionCode 8)
 
