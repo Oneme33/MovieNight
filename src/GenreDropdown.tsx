@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { theme, radius } from './theme';
 import { t } from './i18n';
-import { GENRE_OPTIONS, GenreFilter, NO_GENRES } from './tmdb';
+import { genreOptions, GenreFilter, NO_GENRES } from './tmdb';
 import { hSelect } from './haptics';
 
 // Inline multi-select dropdown (no nested modal), so it works inside the filter sheets.
@@ -12,7 +12,8 @@ export function GenreDropdown({ value, onChange }: { value: GenreFilter; onChang
   const [open, setOpen] = useState(false);
   const { ids, all } = value;
   const active = ids.length > 0;
-  const names = GENRE_OPTIONS.filter((g) => ids.includes(g.id)).map((g) => g.name);
+  const options = genreOptions();
+  const names = options.filter((g) => ids.includes(g.id)).map((g) => g.name);
   const label = !active ? t.allGenres
     : names.length <= 2 ? names.join(all ? ' + ' : ', ')
       : `${names.slice(0, 2).join(all ? ' + ' : ', ')} +${names.length - 2}`;
@@ -49,7 +50,7 @@ export function GenreDropdown({ value, onChange }: { value: GenreFilter; onChang
               <Text style={[s.itemText, !active && { color: theme.red, fontWeight: '600' }]}>{t.allGenres}</Text>
               {!active ? <Ionicons name="checkmark" size={17} color={theme.red} /> : null}
             </TouchableOpacity>
-            {GENRE_OPTIONS.map((g) => {
+            {options.map((g) => {
               const on = ids.includes(g.id);
               return (
                 <TouchableOpacity key={g.id} style={s.item} onPress={() => toggle(g.id)}>

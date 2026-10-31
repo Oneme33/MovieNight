@@ -4,15 +4,28 @@ import { nl } from './nl';
 import { en } from './en';
 
 export type UiLang = 'nl' | 'en';
+export type UiLangSetting = UiLang | 'auto';
 
-// UI language: set UI_LANG in src/config.ts to 'nl' or 'en' to force one, or leave it
-// 'auto' to follow the device (Dutch if the device is Dutch, otherwise English).
-const configured = (config as any).UI_LANG as UiLang | 'auto' | undefined;
 const deviceLang: UiLang = getLocales()[0]?.languageCode === 'nl' ? 'nl' : 'en';
-export const uiLang: UiLang = configured === 'nl' || configured === 'en' ? configured : deviceLang;
+const configured = (config as any).UI_LANG as UiLangSetting | undefined;
 
-// App name follows the same language (defaults to MovieNight on non-Dutch devices).
-export const appName = uiLang === 'nl' ? 'Filmavond' : 'MovieNight';
+// The build-time default (src/config.ts), used until the user picks a language in Settings.
+export const defaultUiLangSetting: UiLangSetting =
+  configured === 'nl' || configured === 'en' ? configured : 'auto';
+
+const resolve = (setting: UiLangSetting): UiLang => (setting === 'auto' ? deviceLang : setting);
+
+// Mutable exports: screens re-render after applyUiLangSetting, and live bindings give them
+// the new values. `t` is a proxy so even already-imported modules read the current language.
+export let uiLang: UiLang = resolve(defaultUiLangSetting);
+export let appName = uiLang === 'nl' ? 'Filmavond' : 'MovieNight';
+
+export function applyUiLangSetting(setting: UiLangSetting) {
+  uiLang = resolve(setting);
+  appName = uiLang === 'nl' ? 'Filmavond' : 'MovieNight';
+}
 
 const dict = { nl, en };
-export const t = dict[uiLang];
+export const t: typeof nl = new Proxy({} as typeof nl, {
+  get: (_target, key) => (dict[uiLang] as any)[key],
+});

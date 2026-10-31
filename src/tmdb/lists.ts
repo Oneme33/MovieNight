@@ -1,7 +1,7 @@
 // Searching and browsing: text search, discover (with filters), US digital releases, recommendations.
 import { t } from '../i18n';
 import type { TitleLang } from '../ListContext';
-import { BASE, apiLang, pickTitle, headers, GENRES, today, isReleased } from './http';
+import { BASE, apiLang, pickTitle, headers, genreName, today, isReleased } from './http';
 import { OUR_PROVIDERS, Provider, SearchResult, GenreFilter, NO_GENRES } from './catalog';
 
 // In-memory cache: identical searches within a session don't hit the API again.
@@ -20,7 +20,7 @@ export async function searchMovies(query: string, lang: TitleLang = 'en'): Promi
     title: pickTitle(lang, r.title, r.original_title),
     year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
     poster_path: r.poster_path ?? null,
-    genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
+    genre: r.genre_ids?.length ? genreName(r.genre_ids[0]) : null,
     rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
     ours: [],
     providersLoaded: false,
@@ -40,7 +40,7 @@ const SORT_PARAM: Record<DiscoverSort, string> = {
 
 export type DiscoverPage = { results: SearchResult[]; totalPages: number };
 export type Length = 'all' | 'xshort' | 'short' | 'mid' | 'long';
-export const LENGTH_OPTIONS: { key: Length; label: string }[] = [
+export const lengthOptions = (): { key: Length; label: string }[] => [
   { key: 'all', label: t.lenAll },
   { key: 'xshort', label: t.lenXShort },
   { key: 'short', label: t.lenShort },
@@ -107,7 +107,7 @@ export async function discover(o: DiscoverOpts): Promise<DiscoverPage> {
     title: pickTitle(lang, r.title, r.original_title),
     year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
     poster_path: r.poster_path ?? null,
-    genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
+    genre: r.genre_ids?.length ? genreName(r.genre_ids[0]) : null,
     rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
     ours,
     providersLoaded: !!providerId,
@@ -138,7 +138,7 @@ export async function usNewPage(lang: TitleLang, page: number): Promise<Discover
       title: pickTitle(lang, r.title, r.original_title),
       year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
       poster_path: r.poster_path ?? null,
-      genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
+      genre: r.genre_ids?.length ? genreName(r.genre_ids[0]) : null,
       rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
       popularity: typeof r.popularity === 'number' ? r.popularity : 0,
       ours: [],
@@ -173,7 +173,7 @@ export async function recommendationsFor(tmdbId: number, lang: TitleLang = 'en',
       title: pickTitle(lang, r.title, r.original_title),
       year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
       poster_path: r.poster_path ?? null,
-      genre: r.genre_ids?.length ? GENRES[r.genre_ids[0]] ?? null : null,
+      genre: r.genre_ids?.length ? genreName(r.genre_ids[0]) : null,
       rating: null, // filled in (IMDb, else TMDB) once the movie's extras load
       popularity: typeof r.popularity === 'number' ? r.popularity : 0,
       ours: [],

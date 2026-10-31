@@ -14,7 +14,7 @@ import { SkeletonList } from '../Loader';
 import { computeTasteMatch, TasteMatchCard, TasteMatchModal } from '../TasteMatch';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 import { useWatchlist } from '../watchlist/useWatchlist';
-import { SORTS, SEEN_SORTS, SortMode, SeenSort, NO_FILTERS, WatchFilters, filterCount, unseenList, seenList } from '../watchlist/logic';
+import { getSorts, getSeenSorts, SortMode, SeenSort, NO_FILTERS, WatchFilters, filterCount, unseenList, seenList } from '../watchlist/logic';
 import { MovieCard } from '../watchlist/MovieCard';
 import { GridCard } from '../watchlist/GridCard';
 import { Roulette } from '../watchlist/Roulette';
@@ -29,6 +29,8 @@ export default function WatchlistScreen() {
   const { session, titleLang, nameOf, refreshMembers } = useSession();
   const me = session?.memberId;
   const w = useWatchlist(session, titleLang, nameOf, refreshMembers);
+  const sorts = getSorts();
+  const seenSorts = getSeenSorts();
   const [tab, setTab] = useState<'watch' | 'seen'>('watch');
   const [sort, setSort] = useState<SortMode>('nieuw');
   const [seenSort, setSeenSort] = useState<SeenSort>('datum');
@@ -95,7 +97,7 @@ export default function WatchlistScreen() {
   );
   const watchHeader = (
     <View style={s.headerRow}>
-      <View style={{ flex: 1 }}>{sortButton(SORTS.find((o) => o.key === sort)!.label, () => setMenuOpen(true))}</View>
+      <View style={{ flex: 1 }}>{sortButton(sorts.find((o) => o.key === sort)!.label, () => setMenuOpen(true))}</View>
       {viewToggleBtn}
       <TouchableOpacity style={[s.squareBtn, nFilters > 0 && s.squareBtnOn]} onPress={() => setFilterOpen(true)} activeOpacity={0.85}>
         <Ionicons name="options-outline" size={20} color={nFilters > 0 ? '#fff' : theme.text} />
@@ -107,7 +109,7 @@ export default function WatchlistScreen() {
     <View>
       <TasteMatchCard match={taste} onPress={() => { hTap(); setTasteOpen(true); }} />
       <View style={s.headerRow}>
-        <View style={{ flex: 1 }}>{sortButton(SEEN_SORTS.find((o) => o.key === seenSort)!.label, () => setSeenMenuOpen(true))}</View>
+        <View style={{ flex: 1 }}>{sortButton(seenSorts.find((o) => o.key === seenSort)!.label, () => setSeenMenuOpen(true))}</View>
         {viewToggleBtn}
       </View>
     </View>
@@ -206,8 +208,8 @@ export default function WatchlistScreen() {
         </Animated.View>
       ) : null}
 
-      <OptionMenu visible={menuOpen} options={SORTS} value={sort} onPick={setSort} onClose={() => setMenuOpen(false)} />
-      <OptionMenu visible={seenMenuOpen} options={SEEN_SORTS} value={seenSort} onPick={setSeenSort} onClose={() => setSeenMenuOpen(false)} />
+      <OptionMenu visible={menuOpen} options={sorts} value={sort} onPick={setSort} onClose={() => setMenuOpen(false)} />
+      <OptionMenu visible={seenMenuOpen} options={seenSorts} value={seenSort} onPick={setSeenSort} onClose={() => setSeenMenuOpen(false)} />
       <RatingModal movie={ratingFor} titleOf={w.displayTitle} onScore={chooseScore} onClose={() => setRatingFor(null)} />
       <FilterSheet visible={filterOpen} value={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} />
       <GridActionMenu

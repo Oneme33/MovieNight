@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.coenvermeer.filmavond",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "backgroundColor": "#B7121C",
         "foregroundImage": "./assets/adaptive-icon.png"

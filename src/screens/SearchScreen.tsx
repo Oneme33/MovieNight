@@ -15,12 +15,13 @@ import { addMovie, fetchMovies } from '../db';
 import { MovieDetails, DetailTarget } from '../MovieDetails';
 import { SkeletonList } from '../Loader';
 import { OptionMenu } from '../watchlist/Menus';
-import { SORTS, DEFAULT_FILTERS, SearchFilters, filterCount, visibleResults } from '../search/logic';
+import { getSorts, DEFAULT_FILTERS, SearchFilters, filterCount, visibleResults } from '../search/logic';
 import { ResultCard } from '../search/ResultCard';
 import { SearchFilterSheet } from '../search/SearchFilterSheet';
 
 export default function SearchScreen() {
   const { session, titleLang, services } = useSession();
+  const sorts = getSorts();
   const myProviders = OUR_PROVIDERS.filter((p) => services.includes(p.key));
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -198,7 +199,7 @@ export default function SearchScreen() {
       <View style={s.controls}>
         <TouchableOpacity style={s.ctrlBtn} onPress={() => setSortMenuOpen(true)} activeOpacity={0.8}>
           <Ionicons name="swap-vertical" size={15} color={theme.text} />
-          <Text style={s.ctrlText} numberOfLines={1}>{SORTS.find((o) => o.key === sort)!.label}</Text>
+          <Text style={s.ctrlText} numberOfLines={1}>{sorts.find((o) => o.key === sort)!.label}</Text>
           <Ionicons name="chevron-down" size={14} color={theme.textMuted} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
         {browsing ? (
@@ -232,7 +233,7 @@ export default function SearchScreen() {
       )}
      </View>
 
-     <OptionMenu visible={sortMenuOpen} options={SORTS} value={sort} onPick={setSort} onClose={() => setSortMenuOpen(false)} />
+     <OptionMenu visible={sortMenuOpen} options={sorts} value={sort} onPick={setSort} onClose={() => setSortMenuOpen(false)} />
      <SearchFilterSheet visible={filterOpen} value={filters} onChange={setFilters} onClose={() => setFilterOpen(false)} />
      <MovieDetails target={detailFor} lang={titleLang} onClose={() => setDetailFor(null)} />
     </Background>

@@ -4,7 +4,7 @@ import { OUR_PROVIDERS, SearchResult, DiscoverSort, Length, matchesLength, Genre
 
 // Pure search/browse logic, kept out of the components so it stays testable.
 
-export const SORTS: { key: DiscoverSort; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+export const getSorts = (): { key: DiscoverSort; label: string; icon: keyof typeof Ionicons.glyphMap }[] => [
   { key: 'popular', label: t.sortPopular, icon: 'flame' },
   { key: 'rating', label: t.sortRating, icon: 'star' },
   { key: 'year_desc', label: t.jaarDown, icon: 'arrow-down' },

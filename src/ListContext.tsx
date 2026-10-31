@@ -2,9 +2,10 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { joinList, fetchMembers, touchMember, renameMember } from './db';
-import { OUR_PROVIDERS } from './tmdb';
+import { OUR_PROVIDERS, resetExtrasCache } from './tmdb';
 import { APP_VERSION } from './version';
 import { setCrashUser } from './sentry';
+import { applyUiLangSetting, defaultUiLangSetting, UiLangSetting } from './i18n';
 
 export type Session = {
   listId: string;
@@ -19,6 +20,8 @@ type Ctx = {
   session: Session | null;
   loading: boolean;
   titleLang: TitleLang;
+  uiLangSetting: UiLangSetting;
+  dataVersion: number;
   services: string[]; // selected streaming service keys (see OUR_PROVIDERS)
   // Display name for a ratings/hype key: a member id, or (older data) already a name.
   nameOf: (key: string | null | undefined) => string;
@@ -26,12 +29,15 @@ type Ctx = {
   setSession: (s: Session) => Promise<void>;
   updateName: (name: string) => Promise<void>;
   setTitleLang: (lang: TitleLang) => Promise<void>;
+  setUiLangSetting: (setting: UiLangSetting) => Promise<void>;
+  bumpDataVersion: () => void;
   setServices: (keys: string[]) => Promise<void>;
   clearSession: () => Promise<void>;
 };
 
 const STORAGE_KEY = 'filmavond.session.v1';
 const LANG_KEY = 'filmavond.titleLang';
+const UI_LANG_KEY = 'filmavond.uiLang';
 const SERVICES_KEY = 'filmavond.services';
 const ALL_SERVICES = OUR_PROVIDERS.map((p) => p.key);
 
@@ -39,12 +45,16 @@ const ListContext = createContext<Ctx>({
   session: null,
   loading: true,
   titleLang: 'en',
+  uiLangSetting: defaultUiLangSetting,
+  dataVersion: 0,
   services: ALL_SERVICES,
   nameOf: (k) => k ?? '',
   refreshMembers: () => {},
   setSession: async () => {},
   updateName: async () => {},
   setTitleLang: async () => {},
+  setUiLangSetting: async () => {},
+  bumpDataVersion: () => {},
   setServices: async () => {},
   clearSession: async () => {},
 });
@@ -52,6 +62,8 @@ const ListContext = createContext<Ctx>({
 export function ListProvider({ children }: { children: React.ReactNode }) {
   const [session, setSessionState] = useState<Session | null>(null);
   const [titleLang, setTitleLangState] = useState<TitleLang>('en');
+  const [uiLangSetting, setUiLangSettingState] = useState<UiLangSetting>(defaultUiLangSetting);
+  const [dataVersion, setDataVersion] = useState(0);
   const [services, setServicesState] = useState<string[]>(ALL_SERVICES);
   const [loading, setLoading] = useState(true);
   const [names, setNames] = useState<Record<string, string>>({});
@@ -81,11 +93,15 @@ export function ListProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       let saved: Session | null = null;
       try {
-        const [lang, svcRaw, raw] = await Promise.all([
+        const [uiRaw, lang, svcRaw, raw] = await Promise.all([
+          AsyncStorage.getItem(UI_LANG_KEY),
           AsyncStorage.getItem(LANG_KEY),
           AsyncStorage.getItem(SERVICES_KEY),
           AsyncStorage.getItem(STORAGE_KEY),
         ]);
+        const uiSetting = uiRaw === 'auto' || uiRaw === 'nl' || uiRaw === 'en' ? uiRaw : defaultUiLangSetting;
+        applyUiLangSetting(uiSetting);
+        setUiLangSettingState(uiSetting);
         if (lang === 'en' || lang === 'nl' || lang === 'original') setTitleLangState(lang);
         if (svcRaw) {
           const parsed = JSON.parse(svcRaw);
@@ -147,6 +163,15 @@ export function ListProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(LANG_KEY, lang);
   };
 
+  const setUiLangSetting = async (setting: UiLangSetting) => {
+    applyUiLangSetting(setting);
+    resetExtrasCache(); // genre names in cached extras follow the UI language
+    setUiLangSettingState(setting);
+    await AsyncStorage.setItem(UI_LANG_KEY, setting);
+  };
+
+  const bumpDataVersion = () => setDataVersion((v) => v + 1);
+
   const setServices = async (keys: string[]) => {
     setServicesState(keys);
     await AsyncStorage.setItem(SERVICES_KEY, JSON.stringify(keys));
@@ -160,7 +185,7 @@ export function ListProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ListContext.Provider
-      value={{ session, loading, titleLang, services, nameOf, refreshMembers, setSession, updateName, setTitleLang, setServices, clearSession }}
+      value={{ session, loading, titleLang, uiLangSetting, dataVersion, services, nameOf, refreshMembers, setSession, updateName, setTitleLang, setUiLangSetting, bumpDataVersion, setServices, clearSession }}
     >
       {children}
     </ListContext.Provider>

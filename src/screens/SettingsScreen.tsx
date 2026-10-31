@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Share, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Share, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { theme, radius } from '../theme';
@@ -7,21 +7,27 @@ import { Background } from '../Background';
 import QRCode from 'react-native-qrcode-svg';
 import { Image } from 'react-native';
 import { t } from '../i18n';
+import type { UiLangSetting } from '../i18n';
 import { useSession } from '../ListContext';
 import { leaveList } from '../db';
-import { OUR_PROVIDERS, LOGO } from '../tmdb';
+import { OUR_PROVIDERS, LOGO, resetExtrasCache } from '../tmdb';
 import { APP_VERSION } from '../version';
 import { UpdateBanner } from '../UpdateBanner';
 import { sendTestError } from '../sentry';
-
-const LANGS: { key: 'en' | 'nl' | 'original'; label: string }[] = [
-  { key: 'en', label: t.langEn },
-  { key: 'nl', label: t.langNl },
-  { key: 'original', label: t.langOriginal },
-];
+import { syncImdbRatings } from '../imdb';
 
 export default function SettingsScreen() {
-  const { session, titleLang, services, updateName, setTitleLang, setServices, clearSession } = useSession();
+  const { session, titleLang, services, uiLangSetting, updateName, setTitleLang, setUiLangSetting, bumpDataVersion, setServices, clearSession } = useSession();
+  const titleLangs: { key: 'en' | 'nl' | 'original'; label: string }[] = [
+    { key: 'en', label: t.langEn },
+    { key: 'nl', label: t.langNl },
+    { key: 'original', label: t.langOriginal },
+  ];
+  const uiLangs: { key: UiLangSetting; label: string }[] = [
+    { key: 'auto', label: t.uiLangAuto },
+    { key: 'nl', label: t.langNl },
+    { key: 'en', label: t.langEn },
+  ];
 
   const toggleService = (key: string) => {
     const next = services.includes(key) ? services.filter((k) => k !== key) : [...services, key];
@@ -30,6 +36,7 @@ export default function SettingsScreen() {
   const [name, setName] = useState(session?.memberName ?? '');
   const [saved, setSaved] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
+  const [syncingImdb, setSyncingImdb] = useState(false);
 
   const onSave = async () => {
     if (!name.trim()) return Alert.alert(t.errName);
@@ -47,6 +54,20 @@ export default function SettingsScreen() {
   const shareCode = async () => {
     if (!session) return;
     await Share.share({ message: t.shareMsg(session.code) });
+  };
+
+  const onSyncImdb = async () => {
+    if (syncingImdb) return;
+    setSyncingImdb(true);
+    const res = await syncImdbRatings();
+    setSyncingImdb(false);
+    if (res.ok) {
+      resetExtrasCache();
+      bumpDataVersion();
+      Alert.alert(t.imdbSyncDone, t.imdbSyncResult(res.built, res.count));
+    } else {
+      Alert.alert(t.imdbSyncFailed, res.error);
+    }
   };
 
   const onUnlink = () => {
@@ -133,10 +154,24 @@ export default function SettingsScreen() {
         })}
       </View>
 
+      <Text style={[styles.section, { marginTop: 28 }]}>{t.uiLangSection}</Text>
+      <Text style={styles.hint}>{t.uiLangHint}</Text>
+      <View style={styles.langRow}>
+        {uiLangs.map((l) => (
+          <TouchableOpacity
+            key={l.key}
+            style={[styles.langChip, uiLangSetting === l.key && styles.langChipOn]}
+            onPress={() => setUiLangSetting(l.key)}
+          >
+            <Text style={[styles.langText, uiLangSetting === l.key && styles.langTextOn]}>{l.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <Text style={[styles.section, { marginTop: 28 }]}>{t.langSection}</Text>
       <Text style={styles.hint}>{t.langHint}</Text>
       <View style={styles.langRow}>
-        {LANGS.map((l) => (
+        {titleLangs.map((l) => (
           <TouchableOpacity
             key={l.key}
             style={[styles.langChip, titleLang === l.key && styles.langChipOn]}
@@ -146,6 +181,13 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <Text style={[styles.section, { marginTop: 28 }]}>{t.imdbSection}</Text>
+      <Text style={styles.hint}>{t.imdbHint}</Text>
+      <TouchableOpacity style={styles.syncBtn} onPress={onSyncImdb} disabled={syncingImdb} activeOpacity={0.85}>
+        {syncingImdb ? <ActivityIndicator color="#fff" /> : <Ionicons name="sync" size={18} color="#fff" />}
+        <Text style={styles.syncText}>{syncingImdb ? t.imdbSyncing : t.imdbSync}</Text>
+      </TouchableOpacity>
 
       <Text style={styles.attribution}>{t.attribution}</Text>
       <Text style={styles.version} onLongPress={() => Alert.alert(sendTestError() ? t.testErrorSent : t.testErrorOff)}>
@@ -199,6 +241,11 @@ const styles = StyleSheet.create({
   langChipOn: { backgroundColor: theme.red, borderColor: theme.red },
   langText: { color: theme.textMuted, fontSize: 14 },
   langTextOn: { color: '#fff', fontWeight: '600' },
+  syncBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 46, borderRadius: radius.md, backgroundColor: theme.red, marginTop: 2,
+  },
+  syncText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   qrWrap: { alignItems: 'center', marginTop: 16 },
   qrHint: { color: theme.textMuted, fontSize: 13, marginBottom: 10, textAlign: 'center' },
   qrBox: { backgroundColor: '#fff', padding: 12, borderRadius: 12 },

@@ -2,19 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Modal, Pressable, Switch } from 'react-native';
 import { theme, radius } from '../theme';
 import { t } from '../i18n';
-import { LENGTH_OPTIONS } from '../tmdb';
+import { lengthOptions } from '../tmdb';
 import { GenreDropdown } from '../GenreDropdown';
 import { DEFAULT_FILTERS, SearchFilters } from './logic';
 
 const THIS_YEAR = new Date().getFullYear();
-const YEAR_PRESETS: { label: string; from: number | null; to: number | null }[] = [
-  { label: t.yearRecent, from: THIS_YEAR - 2, to: null },
-  { label: '2010–19', from: 2010, to: 2019 },
-  { label: '2000–09', from: 2000, to: 2009 },
-  { label: '1990–99', from: 1990, to: 1999 },
-  { label: '1980–89', from: 1980, to: 1989 },
-  { label: t.yearOld, from: null, to: 1979 },
-];
 const parseYear = (v: string) => {
   const n = Number(v);
   return /^\d{4}$/.test(v) && n >= 1900 && n <= THIS_YEAR ? n : null;
@@ -25,6 +17,15 @@ const str = (n: number | null) => (n ? String(n) : '');
 export function SearchFilterSheet({ visible, value, onChange, onClose }: {
   visible: boolean; value: SearchFilters; onChange: (f: SearchFilters) => void; onClose: () => void;
 }) {
+  const lengths = lengthOptions();
+  const yearPresets: { label: string; from: number | null; to: number | null }[] = [
+    { label: t.yearRecent, from: THIS_YEAR - 2, to: null },
+    { label: '2010–19', from: 2010, to: 2019 },
+    { label: '2000–09', from: 2000, to: 2009 },
+    { label: '1990–99', from: 1990, to: 1999 },
+    { label: '1980–89', from: 1980, to: 1989 },
+    { label: t.yearOld, from: null, to: 1979 },
+  ];
   const [fromDraft, setFromDraft] = useState(str(value.yearFrom));
   const [toDraft, setToDraft] = useState(str(value.yearTo));
   useEffect(() => { if (visible) { setFromDraft(str(value.yearFrom)); setToDraft(str(value.yearTo)); } }, [visible]);
@@ -60,7 +61,7 @@ export function SearchFilterSheet({ visible, value, onChange, onClose }: {
           <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={s.label}>{t.lengthLabel}</Text>
             <View style={s.wrapRow}>
-              {LENGTH_OPTIONS.map((l) => (
+              {lengths.map((l) => (
                 <TouchableOpacity key={l.key} style={[s.chip, value.length === l.key && s.chipOn]} onPress={() => set({ length: l.key })}>
                   <Text style={[s.chipText, value.length === l.key && s.chipTextOn]}>{l.label}</Text>
                 </TouchableOpacity>
@@ -82,7 +83,7 @@ export function SearchFilterSheet({ visible, value, onChange, onClose }: {
               />
             </View>
             <View style={[s.wrapRow, { marginTop: 8 }]}>
-              {YEAR_PRESETS.map((p) => {
+              {yearPresets.map((p) => {
                 const on = fromDraft === str(p.from) && toDraft === str(p.to);
                 return (
                   <TouchableOpacity

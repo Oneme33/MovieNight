@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable, Switch } from 'react-native';
 import { theme, radius } from '../theme';
 import { t } from '../i18n';
-import { LENGTH_OPTIONS } from '../tmdb';
+import { lengthOptions } from '../tmdb';
 import { GenreDropdown } from '../GenreDropdown';
 import { NO_FILTERS, WatchFilters } from './logic';
 import { ws } from './styles';
@@ -12,6 +12,7 @@ export function FilterSheet({ visible, value, onChange, onClose }: {
   visible: boolean; value: WatchFilters; onChange: (f: WatchFilters) => void; onClose: () => void;
 }) {
   const set = (patch: Partial<WatchFilters>) => onChange({ ...value, ...patch });
+  const lengths = lengthOptions();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={ws.backdrop}>
@@ -26,7 +27,7 @@ export function FilterSheet({ visible, value, onChange, onClose }: {
 
           <Text style={s.label}>{t.lengthLabel}</Text>
           <View style={s.wrapRow}>
-            {LENGTH_OPTIONS.map((l) => (
+            {lengths.map((l) => (
               <TouchableOpacity key={l.key} style={[s.chip, value.length === l.key && s.chipOn]} onPress={() => set({ length: l.key })}>
                 <Text style={[s.chipText, value.length === l.key && s.chipTextOn]}>{l.label}</Text>
               </TouchableOpacity>

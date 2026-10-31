@@ -1,7 +1,7 @@
 // Images, streaming services, genre filters and the search-result shape.
-import { GENRES } from './http';
+import { genreName } from './http';
 
-export const genreName = (id: number): string | null => GENRES[id] ?? null;
+export { genreName };
 
 export const IMG = (path: string | null, size: 'w200' | 'w342' | 'w500' = 'w342') =>
   path ? `https://image.tmdb.org/t/p/${size}${path}` : null;
@@ -22,10 +22,11 @@ export const OUR_PROVIDERS = [
   { key: 'Apple TV+', id: 350, logo: '/mcbz1LgtErU9p4UdbZ0rG6RTWHX.jpg', match: ['apple tv'], watch: (q: string) => `https://tv.apple.com/search?term=${enc(q)}` },
 ];
 
-// Genre options for the filters, in the UI language.
-export const GENRE_OPTIONS: { id: number; name: string }[] =
+// Genre options for the filters, in the UI language (built on each render so a language
+// switch in Settings is reflected immediately).
+export const genreOptions = (): { id: number; name: string }[] =>
   [28, 12, 16, 35, 80, 99, 18, 10751, 14, 27, 9648, 10749, 878, 53, 10752]
-    .map((id) => ({ id, name: GENRES[id] }));
+    .map((id) => ({ id, name: genreName(id) ?? '' }));
 
 // Selected genres; `all` = a movie needs every genre, otherwise one of them is enough.
 export type GenreFilter = { ids: number[]; all: boolean };

@@ -28,7 +28,9 @@ const GENRES_EN: Record<number, string> = {
   27: 'Horror', 10402: 'Music', 9648: 'Mystery', 10749: 'Romance', 878: 'Sci-fi',
   10770: 'TV movie', 53: 'Thriller', 10752: 'War', 37: 'Western',
 };
-export const GENRES = uiLang === 'nl' ? GENRES_NL : GENRES_EN;
+// Read at call time, so the names follow a language switch made in Settings.
+export const genreName = (id: number): string | null =>
+  (uiLang === 'nl' ? GENRES_NL : GENRES_EN)[id] ?? null;
 
 // Unreleased movies are hidden everywhere — you can't watch them yet.
 export const today = () => new Date().toISOString().slice(0, 10);

@@ -7,7 +7,7 @@ import { MovieExtras, Length, matchesLength, GenreFilter, NO_GENRES, matchesGenr
 // Pure watchlist logic (sorting + filtering), kept out of the components so it stays testable.
 
 export type SortMode = 'nieuw' | 'waardering' | 'titel' | 'streaming' | 'lengte' | 'handmatig';
-export const SORTS: { key: SortMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+export const getSorts = (): { key: SortMode; label: string; icon: keyof typeof Ionicons.glyphMap }[] => [
   { key: 'nieuw', label: t.sortNewest, icon: 'time-outline' },
   { key: 'waardering', label: t.sortRating, icon: 'star-outline' },
   { key: 'titel', label: t.sortTitle, icon: 'text-outline' },
@@ -17,7 +17,7 @@ export const SORTS: { key: SortMode; label: string; icon: keyof typeof Ionicons.
 ];
 
 export type SeenSort = 'datum' | 'titel' | 'cijfer';
-export const SEEN_SORTS: { key: SeenSort; label: string }[] = [
+export const getSeenSorts = (): { key: SeenSort; label: string }[] => [
   { key: 'datum', label: t.seenDate },
   { key: 'titel', label: t.seenTitle },
   { key: 'cijfer', label: t.seenRating },

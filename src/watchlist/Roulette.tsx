@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  Easing, FadeIn, FadeInDown, ZoomIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withTiming,
+} from 'react-native-reanimated';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { hTap, hMedium, hHeavy, hSuccess } from '../haptics';
 import { theme, radius } from '../theme';
@@ -10,7 +12,13 @@ import type { MovieRow } from '../supabase';
 import { IMG } from '../tmdb';
 import { ws } from './styles';
 
-// Movie roulette: 10s countdown → slot-machine spin that decelerates onto the winner.
+const SPIN_MS = 3000;
+const SPIN_STEPS = 30;
+const POSTER_H = 192;
+
+type Spin = { seq: number[]; winner: MovieRow };
+
+// Movie roulette: 10s countdown → a continuous reel that decelerates onto the winner.
 export function Roulette({ visible, candidates, titleOf, onClose }: {
   visible: boolean; candidates: MovieRow[]; titleOf: (m: MovieRow) => string; onClose: () => void;
 }) {
@@ -18,31 +26,41 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
   const [result, setResult] = useState<MovieRow | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [spinIdx, setSpinIdx] = useState(0);
-  const spinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Refs keep the timer independent of re-renders (extras arrive in batches, so the
-  // candidates array changes while the countdown runs). Without this the countdown effect
-  // restarted on every batch and never reached zero.
+  const [spin, setSpin] = useState<Spin | null>(null);
+  // Refs keep the countdown independent of re-renders (extras arrive in batches, so the
+  // candidates array changes while the countdown runs).
   const candidatesRef = useRef(candidates);
   candidatesRef.current = candidates;
   const spinningRef = useRef(false);
   const startSpinRef = useRef<() => void>(() => {});
+  const reelPos = useSharedValue(0);
+  const reelStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -reelPos.value }] }));
 
   const stopSpin = useCallback(() => {
-    if (spinTimer.current) { clearTimeout(spinTimer.current); spinTimer.current = null; }
+    cancelAnimation(reelPos);
+    reelPos.value = 0;
     spinningRef.current = false;
     setSpinning(false);
-  }, []);
+  }, [reelPos]);
 
   // Reset once it's closed, so the next opening starts a fresh round without a flash of the old one.
   useEffect(() => {
     if (visible) return;
     stopSpin();
+    setSpin(null);
     setSpinIdx(0);
     setResult(null);
     setCountdown(10);
   }, [visible, stopSpin]);
 
   const close = () => { stopSpin(); onClose(); };
+
+  const finishSpin = useCallback((winner: MovieRow) => {
+    spinningRef.current = false;
+    setResult(winner);
+    setSpinning(false);
+    hSuccess();
+  }, []);
 
   const startSpin = useCallback(() => {
     const list = candidatesRef.current;
@@ -53,26 +71,23 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
     hMedium();
     const winnerIdx = Math.floor(Math.random() * list.length);
     const winner = list[winnerIdx];
-    // Crescendo: start slow, accelerate to a blur, then burst into the reveal.
-    const delays = [500, 420, 350, 290, 240, 200, 165, 135, 110, 95, 82, 72, 65, 60, 58, 56, 55, 55];
-    let i = 0;
-    const step = () => {
-      setSpinIdx((p) => p + 1);
-      if (delays[i] <= 140) hTap(); // ticks intensify as it speeds up
-      if (i < delays.length) {
-        spinTimer.current = setTimeout(step, delays[i++]);
-      } else {
-        spinTimer.current = null;
-        setSpinIdx(winnerIdx);
-        setResult(winner);
-        spinningRef.current = false;
-        setSpinning(false);
-        hSuccess();
-      }
-    };
-    step();
+    const seq = Array.from({ length: SPIN_STEPS }, () => Math.floor(Math.random() * list.length));
+    seq[seq.length - 1] = winnerIdx;
+    setSpin({ seq, winner });
   }, []);
   startSpinRef.current = startSpin;
+
+  // One continuous animation on the UI thread (no per-tick re-renders or timers).
+  useEffect(() => {
+    if (!visible || !spin) return;
+    reelPos.value = 0;
+    reelPos.value = withTiming((spin.seq.length - 1) * POSTER_H, {
+      duration: SPIN_MS,
+      easing: Easing.out(Easing.cubic),
+    }, (finished) => {
+      if (finished) runOnJS(finishSpin)(spin.winner);
+    });
+  }, [spin, visible, reelPos, finishSpin]);
 
   // Gentle poster carousel while the countdown runs (teases the candidates).
   useEffect(() => {
@@ -98,6 +113,15 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
   }, [countdown, visible, result]);
 
   const teaser = candidates.length ? candidates[spinIdx % candidates.length] : null;
+  const poster = (m: MovieRow | undefined, style: any) => (
+    m?.poster_path ? (
+      <Image source={{ uri: IMG(m.poster_path, 'w342')! }} style={style} />
+    ) : (
+      <View style={[style, s.spinPosterEmpty]}>
+        <Ionicons name="film-outline" size={36} color={theme.textFaint} />
+      </View>
+    )
+  );
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
@@ -110,15 +134,17 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
           {!result ? (
             <>
               <View style={s.spinFrame}>
-                {teaser ? (
-                  <Animated.View key={spinIdx} entering={FadeIn.duration(80)}>
-                    {teaser.poster_path ? (
-                      <Image source={{ uri: IMG(teaser.poster_path, 'w342')! }} style={s.spinPoster} />
-                    ) : (
-                      <View style={[s.spinPoster, s.spinPosterEmpty]}>
-                        <Ionicons name="film-outline" size={36} color={theme.textFaint} />
+                {spinning && spin ? (
+                  <Animated.View style={reelStyle}>
+                    {spin.seq.map((idx, i) => (
+                      <View key={i} style={s.reelItem}>
+                        {poster(candidates.length ? candidates[idx % candidates.length] : undefined, s.spinPoster)}
                       </View>
-                    )}
+                    ))}
+                  </Animated.View>
+                ) : teaser ? (
+                  <Animated.View key={spinIdx} entering={FadeIn.duration(80)}>
+                    {poster(teaser, s.spinPoster)}
                   </Animated.View>
                 ) : null}
               </View>
@@ -141,11 +167,7 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
               <Text style={s.hint}>{t.randomResult}</Text>
               <Animated.View entering={ZoomIn.springify().damping(11)} style={s.resultWrap}>
                 <View style={s.resultPoster}>
-                  {result.poster_path ? (
-                    <Image source={{ uri: IMG(result.poster_path, 'w342')! }} style={s.resultPosterImg} />
-                  ) : (
-                    <Ionicons name="film-outline" size={40} color={theme.textFaint} />
-                  )}
+                  {poster(result, s.resultPosterImg)}
                 </View>
               </Animated.View>
               <Animated.View entering={FadeInDown.delay(200).duration(300)}>
@@ -153,7 +175,7 @@ export function Roulette({ visible, candidates, titleOf, onClose }: {
                 {result.year ? <Text style={[s.hint, { textAlign: 'center' }]}>{result.year}</Text> : null}
               </Animated.View>
               <View style={s.btns}>
-                <TouchableOpacity style={s.ghost} onPress={() => { setResult(null); setCountdown(10); }}>
+                <TouchableOpacity style={s.ghost} onPress={() => { setResult(null); setSpin(null); setCountdown(10); }}>
                   <Ionicons name="refresh" size={16} color={theme.text} />
                   <Text style={s.ghostText}>{t.randomAgain}</Text>
                 </TouchableOpacity>
@@ -174,9 +196,10 @@ const s = StyleSheet.create({
   title: { color: theme.text, fontSize: 30, fontFamily: 'BebasNeue_400Regular', letterSpacing: 3 },
   count: { color: theme.red, fontSize: 56, fontFamily: 'BebasNeue_400Regular', marginVertical: 2 },
   spinFrame: {
-    width: 130, height: 192, borderRadius: 12, marginTop: 14, overflow: 'hidden',
+    width: 130, height: POSTER_H, borderRadius: 12, marginTop: 14, overflow: 'hidden',
     borderWidth: 2, borderColor: theme.redSoft, backgroundColor: theme.surface2,
   },
+  reelItem: { height: POSTER_H, alignItems: 'center', justifyContent: 'center' },
   spinPoster: { width: 126, height: 188, borderRadius: 10 },
   spinPosterEmpty: { alignItems: 'center', justifyContent: 'center' },
   resultWrap: { marginTop: 14 },

@@ -22,6 +22,10 @@ const MIN_REMOTE_COUNT = 100_000; // same sanity check as the server script
 type RemoteMeta = { built: string; count: number };
 const remoteFile = () => new File(Paths.document, REMOTE_FILE);
 
+export type ImdbSyncResult =
+  | { ok: true; built: string; count: number; changed: boolean }
+  | { ok: false; error: string };
+
 let ratingData = IMDB_DATA; // bundled until a newer cached/downloaded list is available
 
 // Binary search in the sorted fixed-width string: no parsing, no extra memory.
@@ -63,24 +67,33 @@ async function loadCachedRemote() {
   } catch {}
 }
 
-// Once per app start: ask for the small metadata file, and only download the list when the
-// server has a newer build than the app's bundled or cached copy.
-async function refreshRemote() {
-  if (Platform.OS === 'web') return;
+// Ask for the small metadata file, and only download the list when the server has a newer
+// build than the app's bundled or cached copy (or when the user presses "sync now").
+async function refreshRemote(force = false): Promise<ImdbSyncResult> {
+  if (Platform.OS === 'web') return { ok: false, error: 'Not supported on web' };
   try {
     const res = await fetch(`${REMOTE_BASE}/imdb-ratings.json`, { headers: { 'cache-control': 'no-cache' } });
-    if (!res.ok) return;
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const meta = (await res.json()) as RemoteMeta;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(meta?.built ?? '') || !(meta?.count >= MIN_REMOTE_COUNT)) return;
-    if (meta.built <= IMDB_BUILT) return; // bundled list is at least as new
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(meta?.built ?? '') || !(meta?.count >= MIN_REMOTE_COUNT)) {
+      return { ok: false, error: 'Invalid metadata' };
+    }
+    if (!force && meta.built <= IMDB_BUILT) {
+      return { ok: true, built: meta.built, count: meta.count, changed: false };
+    }
     const cached = await readRemoteMeta();
     const file = remoteFile();
-    if (cached?.built === meta.built && file.exists && file.size === meta.count * REC) return;
+    if (!force && cached?.built === meta.built && file.exists && file.size === meta.count * REC) {
+      return { ok: true, built: meta.built, count: meta.count, changed: false };
+    }
     const downloaded = await File.downloadFileAsync(`${REMOTE_BASE}/${REMOTE_FILE}`, file, { idempotent: true });
-    if (downloaded.size !== meta.count * REC) return; // partial/corrupt: keep what we had
+    if (downloaded.size !== meta.count * REC) return { ok: false, error: 'Download incomplete' };
     ratingData = await downloaded.text();
     await AsyncStorage.setItem(REMOTE_STORE, JSON.stringify({ built: meta.built, count: meta.count }));
-  } catch {}
+    return { ok: true, built: meta.built, count: meta.count, changed: true };
+  } catch (e) {
+    return { ok: false, error: (e as any)?.message ?? String(e) };
+  }
 }
 
 // Live answers, persisted. `r` null = IMDb had no rating yet (also worth remembering).
@@ -97,6 +110,21 @@ const hydrate = () => (hydrated ??= (async () => {
   } catch {}
   refreshRemote(); // background: updates ratingData for later lookups
 })());
+
+let syncing: Promise<ImdbSyncResult> | null = null;
+
+// Manual sync from Settings: always downloads the server's newest list, and forgets live
+// answers so the fresh list is used on the next lookup.
+export function syncImdbRatings(): Promise<ImdbSyncResult> {
+  syncing ??= refreshRemote(true).then(async (result) => {
+    if (result.ok) {
+      live.clear();
+      await AsyncStorage.removeItem(STORE).catch(() => {});
+    }
+    return result;
+  }).finally(() => { syncing = null; });
+  return syncing;
+}
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave() {

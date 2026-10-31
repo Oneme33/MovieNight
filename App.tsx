@@ -84,9 +84,9 @@ function MainTabs() {
 }
 
 function Root() {
-  const { session, loading } = useSession();
+  const { session, loading, dataVersion } = useSession();
   if (loading) return <SplashLoader />;
-  return session ? <MainTabs /> : <OnboardingScreen />;
+  return session ? <MainTabs key={`data-${dataVersion}`} /> : <OnboardingScreen key={`data-${dataVersion}`} />;
 }
 
 function App() {

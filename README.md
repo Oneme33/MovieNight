@@ -2,9 +2,9 @@
 
 A shared movie watchlist for two people, with live sync between phones. Built with
 Expo / React Native, Supabase (database + realtime + anonymous auth) and TMDB
-(movie data + streaming availability). The UI follows the device language
-(English or Dutch, or forced with `UI_LANG` in `src/config.ts`); the app is called
-**MovieNight** in English and **Filmavond** in Dutch.
+(movie data + streaming availability). The UI follows the device language by default
+(English or Dutch) and can be switched in Settings; `UI_LANG` in `src/config.ts` only sets
+the initial default. The app is called **MovieNight** in English and **Filmavond** in Dutch.
 
 ## Features
 
@@ -75,8 +75,9 @@ only, into `dist/site/`; `--page-only` republishes just the page with the last b
 The app also downloads newer daily ratings from the server (see below), so the bundled
 list only has to be refreshed for new installs and offline use.
 The page is bilingual (browser language, with an NL/EN switch) and shows the screenshots
-in `site/screenshots/` with captions from `site/screenshots.json`. Before a release: bump `version`/`versionCode` in `app.json` and
-add an entry to `release-notes.md` (shown on the page) and `CHANGELOG.md`. Signing uses the
+in `site/screenshots/` with captions from `site/screenshots.json`. Before a release: bump
+`versionCode` (and usually `version`) in `app.json` and add an entry to `release-notes.md`
+(shown on the page) and `CHANGELOG.md`. Signing uses the
 `MN_*` properties in `~/.gradle/gradle.properties` (see `plugins/withReleaseSigning.js`).
 
 ## IMDb ratings on the server
@@ -86,7 +87,7 @@ add an entry to `release-notes.md` (shown on the page) and `CHANGELOG.md`. Signi
 It writes `imdb-ratings.txt` (the same fixed-width format as the bundled list) and
 `imdb-ratings.json` with the build date and movie count. The app checks the JSON on start,
 downloads the TXT only when it is newer than its bundled/cached copy, and validates the
-size before using it.
+size before using it. Settings has a "refresh IMDb ratings" button that forces this download.
 
 ## Build an Android APK manually
 

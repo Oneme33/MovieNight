@@ -54,10 +54,12 @@ const EXTRAS_MAX_ENTRIES = 500;
 const MAX_CONCURRENT = 6;
 
 let hydrated: Promise<void> | null = null;
+let generation = 0;
 function hydrateExtras(): Promise<void> {
   if (!hydrated) {
+    const gen = generation;
     hydrated = AsyncStorage.getItem(EXTRAS_STORE).then((raw) => {
-      if (!raw) return;
+      if (gen !== generation || !raw) return;
       const now = Date.now();
       for (const [k, v] of Object.entries(JSON.parse(raw) as Record<string, { at: number; ex: MovieExtras }>)) {
         if (now - v.at < EXTRAS_MAX_AGE && !extrasCache.has(k)) extrasCache.set(k, v);
@@ -65,6 +67,15 @@ function hydrateExtras(): Promise<void> {
     }).catch(() => {});
   }
   return hydrated;
+}
+
+// Drop everything after an IMDb sync, so cards reload with the fresh ratings.
+export function resetExtrasCache() {
+  generation++;
+  hydrated = null;
+  extrasCache.clear();
+  extrasInFlight.clear();
+  AsyncStorage.removeItem(EXTRAS_STORE).catch(() => {});
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -98,8 +109,9 @@ export async function getMovieExtras(tmdbId: number, lang: TitleLang = 'en'): Pr
   if (hit) return hit.ex;
   const pending = extrasInFlight.get(key);
   if (pending) return pending;
+  const gen = generation;
   const p = throttled(() => fetchExtras(tmdbId, lang)).then((ex) => {
-    if (ex !== EMPTY_EXTRAS) {
+    if (gen === generation && ex !== EMPTY_EXTRAS) {
       extrasCache.set(key, { at: Date.now(), ex });
       scheduleSave();
     }

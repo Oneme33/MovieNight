@@ -6,12 +6,16 @@ the newest entry is shown. Technical details go in CHANGELOG.md.
 ## 1.5.2 — 2026-10-31
 
 ### nl
-- **Actuele IMDb-cijfers:** de app haalt dagelijks een nieuwe cijferlijst op, zodat de waarderingen actueel blijven zonder dat je een nieuwe versie hoeft te installeren.
-- **Filmroulette:** de aftelling werkt weer en de app kiest na tien seconden netjes een winnaar.
+- **Taal in Instellingen:** kies Nederlands, Engels of automatisch; de app past de taal meteen aan.
+- **IMDb-cijfers verversen:** met een knop in Instellingen haal je de nieuwste cijfers op zonder een nieuwe app te installeren.
+- **Vloeiendere filmroulette:** de aftelling werkt weer en de posterrol draait soepel en vertraagt naar de winnaar.
+- **Actuele IMDb-cijfers:** de app haalt dagelijks automatisch een nieuwe cijferlijst op, zodat de waarderingen actueel blijven.
 
 ### en
-- **Up-to-date IMDb ratings:** the app downloads a fresh ratings list every day, so scores stay current without installing a new version.
-- **Movie roulette:** the countdown works again and the app picks a winner after ten seconds.
+- **Language in Settings:** choose Dutch, English or automatic; the app switches language immediately.
+- **Refresh IMDb ratings:** a button in Settings downloads the newest scores without installing a new app.
+- **Smoother movie roulette:** the countdown works again and the poster reel spins smoothly and slows down onto the winner.
+- **Up-to-date IMDb ratings:** the app automatically downloads a fresh ratings list every day, so scores stay current.
 
 ## 1.5.1 — 2026-10-21
 

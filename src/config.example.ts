@@ -6,7 +6,8 @@ export const TMDB_TOKEN = 'YOUR_TMDB_READ_ACCESS_TOKEN';
 export const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
 export const SUPABASE_KEY = 'YOUR_SUPABASE_PUBLISHABLE_KEY';
 
-// UI language: 'auto' follows the device, or force 'nl' / 'en' for the whole app.
+// Default UI language: 'auto' follows the device. The app can switch it in Settings;
+// this only sets the initial value.
 export const UI_LANG: 'auto' | 'nl' | 'en' = 'auto';
 
 // Optional: free OMDb key (https://www.omdbapi.com/apikey.aspx, 1,000 requests/day) for
